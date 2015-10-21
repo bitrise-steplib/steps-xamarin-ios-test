@@ -12,10 +12,10 @@ if [ ! -z "${workdir}" ] ; then
 fi
 
 ruby "${THIS_SCRIPTDIR}/step.rb" \
-  "${xamarin_solution}" \
-	"${xamarin_configuration}" \
-	"${xamarin_platform}" \
-	"${xamarin_builder}" \
-  "${simulator_device}" \
-	"${simulator_os_version}" \
-	"${nunit_console_path}"
+	-s "${xamarin_solution}" \
+	-c "${xamarin_configuration}" \
+	-p "${xamarin_platform}" \
+	-b "${xamarin_builder}" \
+	-d "${simulator_device}" \
+	-o "${simulator_os_version}" \
+	-n "${nunit_console_path}"
