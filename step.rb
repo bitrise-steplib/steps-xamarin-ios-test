@@ -113,11 +113,11 @@ end
 
 def boot_simulator!(simulator, xcode_major_version)
   simulator_cmd = '/Applications/Xcode.app/Contents/Developer/Applications/Simulator.app' if xcode_major_version == 7
-  simulator_cmd = '/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Applications/iPhone\ Simulator.app' if xcode_major_version == 6
+  simulator_cmd = '/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Applications/iPhone Simulator.app' if xcode_major_version == 6
   fail_with_message("invalid xcode_major_version (#{xcode_major_version})") unless simulator_cmd
 
   `open #{simulator_cmd} --args -CurrentDeviceUDID #{simulator[:udid]}`
-  fail_with_message("open #{simulator_cmd} --args -CurrentDeviceUDID #{simulator[:udid]} -- failed") unless $?.success?
+  fail_with_message("open \"#{simulator_cmd}\" --args -CurrentDeviceUDID #{simulator[:udid]} -- failed") unless $?.success?
 
   begin
     Timeout.timeout(60) do
@@ -130,7 +130,7 @@ def boot_simulator!(simulator, xcode_major_version)
       end
     end
   rescue Timeout::Error
-    fail_with_message('simulator shutdown timed out')
+    fail_with_message('simulator boot timed out')
   end
   sleep 2
 end
@@ -249,7 +249,8 @@ builders = {
   'xbuild' => '/Library/Frameworks/Mono.framework/Versions/Current/bin/xbuild'
 }
 
-puts "\n=> generating .app"
+puts
+puts "=> generating .app"
 params = ["\"#{builders[options[:builder]]}\""]
 case options[:builder]
 when 'xbuild'
@@ -265,7 +266,8 @@ else
 end
 
 # Building
-puts "\n#{params.join(' ')}"
+puts
+puts "#{params.join(' ')}"
 system("#{params.join(' ')}")
 fail_with_message('Build failed') unless $?.success?
 puts
@@ -285,12 +287,14 @@ fail_with_message('failed to get .dll path') unless dll_path
 puts "  (i) .dll path: #{dll_path}"
 
 # Copy .app to simulator
-puts "\n=> copy .app to simulator"
+puts
+puts "=> copy .app to simulator"
 copy_app_to_simulator!(simulator, app_path, xcode_version)
 puts '(i) .app successfully copied to simulator'
 
 # Run unit test
-puts "\n=> run unit test"
+puts
+puts "=> run unit test"
 run_unit_test!(options[:nunit_path], dll_path)
 puts "(i) unit test successfully runned"
 

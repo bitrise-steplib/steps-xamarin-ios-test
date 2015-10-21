@@ -6,7 +6,7 @@ app:
   - SOLUTION_PATH: ${HOME}/Downloads/test/git/CreditCardValidator.iOS.sln
   - BITRISE_XAMARIN_CONFIGURATION: Debug
   - BITRISE_XAMARIN_PLATFORM: iPhone
-  - BITRISE_XAMARIN_BUILD_TOOL: xbuild
+  - BITRISE_XAMARIN_BUILD_TOOL: mdtool
   - SIMULATOR_DEVICE: "iPhone 6"
   - SIMULATOR_OS_VERSION: "iOS 9.0"
 
