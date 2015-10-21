@@ -6,10 +6,9 @@ app:
   - SOLUTION_PATH: ${HOME}/Downloads/test/git/CreditCardValidator.iOS.sln
   - BITRISE_XAMARIN_CONFIGURATION: Debug
   - BITRISE_XAMARIN_PLATFORM: iPhone
-  - BITRISE_XAMARIN_BUILD_TOOL: mdtool
+  - BITRISE_XAMARIN_BUILD_TOOL: xbuild
   - SIMULATOR_DEVICE: "iPhone 6"
   - SIMULATOR_OS_VERSION: "iOS 9.0"
-  - NUNIT_CONSOLE_PATH: ${HOME}/Downloads/test/NUnit-2.6.4/bin/nunit-console.exe
 
 workflows:
   test:
@@ -22,7 +21,7 @@ workflows:
         - xamarin_builder: ${BITRISE_XAMARIN_BUILD_TOOL}
         - simulator_device: ${SIMULATOR_DEVICE}
         - simulator_os_version: ${SIMULATOR_OS_VERSION}
-        - nunit_console_path: ${NUNIT_CONSOLE_PATH}
+        - nunit_console_path: ${NUNIT_CONSOLE}
     - script:
         inputs:
         - content: |-
