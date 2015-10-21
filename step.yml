@@ -1,0 +1,103 @@
+title: "STEP TEMPLATE"
+summary: A short summary of the step. Don't make it too long ;)
+description: |-
+  This is a Step template.
+  Contains everything what's required for a valid Stepman managed step.
+
+  A Step's description (and generally any `description` property)
+  can be a [Markdown](https://en.wikipedia.org/wiki/Markdown) formatted text.
+
+  To create your own Step:
+
+  1. Create a new repository on GitHub
+  2. Copy the files from this folder into your repository
+  3. That's all, you can use it on your own machine
+  4. Once you're happy with it you can share it with others.
+website: https://github.com/...
+source_code_url: https://github.com/...
+support_url: https://github.com/.../issues
+host_os_tags:
+  - osx-10.10
+project_type_tags:
+  - ios
+type_tags:
+  - script
+is_requires_admin_user: true
+is_always_run: false
+is_skippable: false
+dependencies:
+  - manager: brew
+    name: git
+run_if: ""
+inputs:
+  - xamarin_solution:
+    opts:
+      title: Path to Xamarin Solution
+      description: |
+        Path to Xamarin Solution
+      is_required: true
+      is_expand: true
+  - xamarin_configuration:
+    opts:
+      title: Xamarin project configuration
+      description: |
+        Xamarin project configuration
+      is_required: true
+      is_expand: true
+  - xamarin_platform:
+    opts:
+      title: Xamarin platform
+      description: |
+        Xamarin platform
+      is_required: true
+      is_expand: true
+  - xamarin_builder:
+    opts:
+      title: Build tool
+      value_options:
+        - xbuild
+        - mdtool
+      is_required: true
+      is_expand: true
+  - simulator_device: iPhone 6
+    opts:
+      title: "Device"
+      description: |
+        Set it as it is shown in
+        Xcode's device selection dropdown UI.
+        A couple of examples (the
+        actual available options depend on which versions
+        are installed):
+        * iPhone 6
+        * iPhone 6 Plus
+        * iPad
+        * iPad Air
+      is_required: true
+      is_expand: true
+  - simulator_os_version: latest
+    opts:
+      title: "OS version"
+      description: |
+        A couple of format examples:
+        * iOS 8.4
+        * iOS 9.0
+      is_required: false
+      is_expand: true
+  - nunit_console_path:
+    opts:
+      title: "nunit-console path"
+      description: |
+        "nunit-console path"
+      is_required: true
+      is_expand: true
+outputs:
+- BITRISE_XAMARIN_TEST_RESULT:
+  opts:
+    title: Result of the tests. 'succeeded' or 'failed'.
+    value_options:
+    - succeeded
+    - failed
+- BITRISE_XAMARIN_TEST_FULL_RESULTS_TEXT:
+  opts:
+    title: ""
+    description: ""
