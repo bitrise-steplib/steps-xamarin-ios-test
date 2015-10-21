@@ -1,5 +1,6 @@
 require 'optparse'
 require 'pathname'
+require 'timeout'
 
 # -----------------------
 # --- functions
@@ -84,81 +85,84 @@ def export_dll(test_build_path)
   full_path
 end
 
-def shutdown_simulator(xcode_major_version)
+def shutdown_simulator!(xcode_major_version)
   all_has_shutdown_state = simulators_has_shutdown_state?
-  return 0 if all_has_shutdown_state
+  return if all_has_shutdown_state
 
-  `killall Simulator` if xcode_major_version == 7
-  `killall "iOS Simulator"` if xcode_major_version == 6
-  return 1 unless $?.success?
+  shut_down_cmd = 'killall Simulator' if xcode_major_version == 7
+  shut_down_cmd = 'killall "iOS Simulator"' if xcode_major_version == 6
+  fail_with_message("invalid xcode_major_version (#{xcode_major_version})") unless shut_down_cmd
 
-  boot_start = Time.now
-  loop do
-    sleep 1 # second
-    all_has_shutdown_state = simulators_has_shutdown_state?
-    puts '    => waiting for shutdown ...'
+  `#{shut_down_cmd}`
+  fail_with_message("#{shut_down_cmd} -- failed") unless $?.success?
 
-    return 1 if Time.now - boot_start > 60
+  begin
+    Timeout.timeout(60) do
+      loop do
+        sleep 1 # second
+        all_has_shutdown_state = simulators_has_shutdown_state?
+        puts '    => waiting for shutdown ...'
 
-    break if all_has_shutdown_state
+        break if all_has_shutdown_state
+      end
+    end
+  rescue Timeout::Error
+    fail_with_message('simulator shutdown timed out')
   end
-  0
 end
 
-def boot_simulator(simulator, xcode_major_version)
+def boot_simulator!(simulator, xcode_major_version)
   simulator_cmd = '/Applications/Xcode.app/Contents/Developer/Applications/Simulator.app' if xcode_major_version == 7
   simulator_cmd = '/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Applications/iPhone\ Simulator.app' if xcode_major_version == 6
-  return 1 unless simulator_cmd
+  fail_with_message("invalid xcode_major_version (#{xcode_major_version})") unless simulator_cmd
 
   `open #{simulator_cmd} --args -CurrentDeviceUDID #{simulator[:udid]}`
-  return 1 unless $?.success?
+  fail_with_message("open #{simulator_cmd} --args -CurrentDeviceUDID #{simulator[:udid]} -- failed") unless $?.success?
 
-  boot_start = Time.now
-  loop do
-    sleep 1 # seconds
-    out = `xcrun simctl openurl #{simulator[:udid]} https://www.google.com 2>&1`
-    puts '    => waiting for boot ...'
+  begin
+    Timeout.timeout(60) do
+      loop do
+        sleep 1 # seconds
+        out = `xcrun simctl openurl #{simulator[:udid]} https://www.google.com 2>&1`
+        puts '    => waiting for boot ...'
 
-    return 1 if Time.now - boot_start > 60
-
-    break if out == ''
+        break if out == ''
+      end
+    end
+  rescue Timeout::Error
+    fail_with_message('simulator shutdown timed out')
   end
   sleep 2
-  0
 end
 
-def copy_app_to_simulator(simulator, app_path, xcode_major_version)
+def copy_app_to_simulator!(simulator, app_path, xcode_major_version)
   puts '  => shutdown simulators'
-  exit_code = shutdown_simulator(xcode_major_version)
-  return 1 if exit_code != 0
+  shutdown_simulator!(xcode_major_version)
 
   puts "  => erase simulator #{simulator}"
   `xcrun simctl erase #{simulator[:udid]}`
-  return 1 unless $?.success?
+  fail_with_message("xcrun simctl erase #{simulator[:udid]} -- failed") unless $?.success?
 
   puts "  => boot simulator #{simulator}"
-  exit_code = boot_simulator(simulator, xcode_major_version)
-  return 1 if exit_code != 0
+  boot_simulator!(simulator, xcode_major_version)
 
   puts "  => install .app #{app_path} to #{simulator}"
   `xcrun simctl install #{simulator[:udid]} #{app_path}`
-  return 1 unless $?.success?
-  0
+  fail_with_message("xcrun simctl install #{simulator[:udid]} #{app_path} -- failed") unless $?.success?
 end
 
-def run_unit_test(nunit_console_path, dll_path)
+def run_unit_test!(nunit_console_path, dll_path)
   mono = '/Library/Frameworks/Mono.framework/Versions/Current/bin/mono'
   out = `#{mono} #{nunit_console_path} #{dll_path}`
-  return [out, 1] unless $?.success?
+  puts out
+  fail_with_message("#{mono} #{nunit_console_path} #{dll_path} -- failed") unless $?.success?
 
   regex = 'Tests run: (?<total>\d*), Errors: (?<errors>\d*), Failures: (?<failures>\d*), Inconclusive: (?<inconclusives>\d*), Time: (?<time>\S*) seconds\n  Not run: (?<not_run>\d*), Invalid: (?<invalid>\d*), Ignored: (?<ignored>\d*), Skipped: (?<skipped>\d*)'
   match = out.match(regex)
   unless match.nil?
     _total, errors, failures, _inconclusives, _time, _not_run, _invalid, _ignored, _skipped = match.captures
-    return [out, 1] unless errors.to_i == 0 && failures.to_i == 0
-    return [match, 0]
+    fail_with_message("#{mono} #{nunit_console_path} #{dll_path} -- failed") unless errors.to_i == 0 && failures.to_i == 0
   end
-  [out, 1]
 end
 
 # -----------------------
@@ -282,16 +286,13 @@ puts "  (i) .dll path: #{dll_path}"
 
 # Copy .app to simulator
 puts "\n=> copy .app to simulator"
-exit_code = copy_app_to_simulator(simulator, app_path, xcode_version)
-fail_with_message('failed to copy .app to simulator') if exit_code != 0
+copy_app_to_simulator!(simulator, app_path, xcode_version)
 puts '(i) .app successfully copied to simulator'
 
 # Run unit test
 puts "\n=> run unit test"
-out, exit_code = run_unit_test(options[:nunit_path], dll_path)
-fail_with_message("failed to run unit test, out:\n#{out}") if exit_code != 0
-puts "(i) unit test successfully runned, output:\n"
-puts "\n#{out}"
+run_unit_test!(options[:nunit_path], dll_path)
+puts "(i) unit test successfully runned"
 
 # Set output envs
 work_dir = ENV['BITRISE_SOURCE_DIR']
