@@ -74,10 +74,13 @@ def clean_project!(builder, project_path, configuration, platform)
   when 'xbuild'
     params << "\"#{project_path}\""
     params << '/t:Clean'
+    params << "/p:Configuration=\"#{configuration}\""
+    params << "/p:Platform=\"#{platform}\""
   when 'mdtool'
     params << '-v build'
     params << "\"#{project_path}\""
     params << '--target:Clean'
+    params << "--configuration:\"#{configuration}|#{platform}\""
   else
     fail_with_message('Invalid build tool detected')
   end
