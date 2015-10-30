@@ -13,7 +13,6 @@ fi
 
 echo
 echo "==> Install nunit console"
-echo
 # Download nunit-console
 NUNIT_DOWNLOAD_LINK="http://github.com/nunit/nunitv2/releases/download/2.6.4/NUnit-2.6.4.zip"
 DOWNLOAD_DIR="${HOME}/.nunit"
@@ -33,12 +32,13 @@ NUNIT_CONSOLE="${UNZIP_LOCATION}/NUnit-2.6.4/bin/nunit-console.exe"
 
 echo
 echo "==> Performing step"
-echo
 ruby "${THIS_SCRIPTDIR}/step.rb" \
-	-s "${xamarin_solution}" \
+	-s "${xamarin_project}" \
+	-t "${xamarin_test_project}" \
 	-c "${xamarin_configuration}" \
 	-p "${xamarin_platform}" \
 	-b "${xamarin_builder}" \
+	-i "${is_clean_build}" \
 	-d "${simulator_device}" \
 	-o "${simulator_os_version}" \
 	-n "${NUNIT_CONSOLE}"

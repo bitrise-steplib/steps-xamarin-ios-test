@@ -27,6 +27,66 @@ def xcode_major_version!
   version
 end
 
+def build_project!(builder, project_path, configuration, platform)
+  builders = {
+    'mdtool' => '/Applications/Xamarin Studio.app/Contents/MacOS/mdtool',
+    'xbuild' => '/Library/Frameworks/Mono.framework/Versions/Current/bin/xbuild'
+  }
+
+  # Build project
+  output_path = File.join('bin', platform, configuration)
+
+  params = ["\"#{builders[builder]}\""]
+  case builder
+  when 'xbuild'
+    params << "\"#{project_path}\""
+    params << '/t:Build'
+    params << "/p:Configuration=\"#{configuration}\""
+    params << "/p:Platform=\"#{platform}\""
+    params << "/p:OutputPath=\"#{output_path}/\""
+  when 'mdtool'
+    params << '-v build'
+    params << "\"#{project_path}\""
+    params << "--configuration:\"#{configuration}|#{platform}\""
+    params << '--target:Build'
+  else
+    fail_with_message('Invalid build tool detected')
+  end
+
+  puts "#{params.join(' ')}"
+  system("#{params.join(' ')}")
+  fail_with_message('Build failed') unless $?.success?
+
+  # Get the build path
+  project_directory = File.dirname(project_path)
+  File.join(project_directory, output_path)
+end
+
+def clean_project!(builder, project_path, configuration, platform)
+  builders = {
+    'mdtool' => '/Applications/Xamarin Studio.app/Contents/MacOS/mdtool',
+    'xbuild' => '/Library/Frameworks/Mono.framework/Versions/Current/bin/xbuild'
+  }
+
+  # clean project
+  params = ["\"#{builders[builder]}\""]
+  case builder
+  when 'xbuild'
+    params << "\"#{project_path}\""
+    params << '/t:Clean'
+  when 'mdtool'
+    params << '-v build'
+    params << "\"#{project_path}\""
+    params << '--target:Clean'
+  else
+    fail_with_message('Invalid build tool detected')
+  end
+
+  puts "#{params.join(' ')}"
+  system("#{params.join(' ')}")
+  fail_with_message('Clean failed') unless $?.success?
+end
+
 def simulator_udid_and_state(simulator_device, os_version)
   os_found = false
   os_regex = "-- #{os_version} --"
@@ -169,12 +229,15 @@ end
 # --- main
 # -----------------------
 
+#
 # Input validation
 options = {
-  solution: nil,
+  project: nil,
+  test_project: nil,
   configuration: nil,
   platform: nil,
   builder: nil,
+  clean_build: true,
   device: nil,
   os: nil,
   nunit_path: nil
@@ -182,44 +245,32 @@ options = {
 
 parser = OptionParser.new do|opts|
   opts.banner = 'Usage: step.rb [options]'
-  opts.on('-s', '--solution path', 'Solution path') { |s| options[:solution] = s unless s.to_s == '' }
+  opts.on('-s', '--project path', 'Project path') { |s| options[:project] = s unless s.to_s == '' }
+  opts.on('-t', '--test project', 'Test project') { |t| options[:test_project] = t unless t.to_s == '' }
   opts.on('-c', '--configuration config', 'Configuration') { |c| options[:configuration] = c unless c.to_s == '' }
   opts.on('-p', '--platform platform', 'Platform') { |p| options[:platform] = p unless p.to_s == '' }
   opts.on('-b', '--builder builder', 'Builder') { |b| options[:builder] = b unless b.to_s == '' }
+  opts.on('-i', '--clean build', 'Clean build') { |i| options[:clean_build] = false if i.to_s == 'no' }
   opts.on('-d', '--device device', 'Device') { |d| options[:device] = d unless d.to_s == '' }
   opts.on('-o', '--os os', 'OS') { |o| options[:os] = o unless o.to_s == '' }
   opts.on('-n', '--nunit path', 'NUnit path') { |n| options[:nunit_path] = n unless n.to_s == '' }
   opts.on('-h', '--help', 'Displays Help') do
-    puts opts
     exit
   end
 end
 parser.parse!
 
-fail_with_message('xamarin_solution not specified') unless options[:solution]
-puts "(i) xamarin_solution: #{options[:solution]}"
-
-fail_with_message('xamarin_configuration not specified') unless options[:configuration]
-puts "(i) xamarin_configuration: #{options[:configuration]}"
-
-fail_with_message('xamarin_platform not specified') unless options[:platform]
-puts "(i) xamarin_platform: #{options[:platform]}"
-
-fail_with_message('xamarin_builder not specified') unless options[:builder]
-puts "(i) xamarin_builder: #{options[:builder]}"
-
+fail_with_message('project not specified') unless options[:project]
+fail_with_message('test_project not specified') unless options[:test_project]
+fail_with_message('configuration not specified') unless options[:configuration]
+fail_with_message('platform not specified') unless options[:platform]
+fail_with_message('builder not specified') unless options[:builder]
 fail_with_message('simulator_device not specified') unless options[:device]
-puts "(i) simulator_device: #{options[:device]}"
-
 fail_with_message('simulator_os_version not specified') unless options[:os]
-puts "(i) simulator_os_version: #{options[:os]}"
-
 fail_with_message('nunit_console_path not specified') unless options[:nunit_path]
-puts "(i) nunit_console_path: #{options[:nunit_path]}"
 
 udid, state = simulator_udid_and_state(options[:device], options[:os])
 fail_with_message('failed to get simulator udid') unless udid || state
-puts "(i) simulator udid: #{udid} - state: #{state}"
 
 simulator = {
   name: options[:device],
@@ -236,70 +287,76 @@ if options[:platform] != 'iPhoneSimulator'
   options[:platform] = 'iPhoneSimulator'
 end
 
-# Environments
-solution_file = Pathname.new(options[:solution]).realpath.to_s
-project_root_directory = File.dirname(solution_file)
-puts "(i) project_root_directory: #{project_root_directory}"
+if options[:configuration] != 'Debug'
+  puts ''
+  puts "(!) Given configuration: \'#{options[:configuration]}\', but unit test requires configuration \'Debug\'"
+  puts '(!) Change configuration to \'Debug\'...'
+  options[:configuration] = 'Debug'
+end
 
 xcode_version = xcode_major_version!
 
-# Preparing build params
-builders = {
-  'mdtool' => '/Applications/Xamarin Studio.app/Contents/MacOS/mdtool',
-  'xbuild' => '/Library/Frameworks/Mono.framework/Versions/Current/bin/xbuild'
-}
-
+#
+# Print configs
 puts
-puts "=> generating .app"
-params = ["\"#{builders[options[:builder]]}\""]
-case options[:builder]
-when 'xbuild'
-  params << "/p:Configuration=\"#{options[:configuration]}\"" if options[:configuration]
-  params << "/p:Platform=\"#{options[:platform]}\"" if options[:platform]
-  params << "\"#{options[:solution]}\""
-when 'mdtool'
-  params << '-v build'
-  params << "--configuration:\"#{options[:configuration]}|#{options[:platform]}\""
-  params << "\"#{options[:solution]}\""
-else
-  fail_with_message('Invalid build tool detected')
+puts '========== Configs =========='
+puts " * project: #{options[:project]}"
+puts " * test_project: #{options[:test_project]}"
+puts " * configuration: #{options[:configuration]}"
+puts " * platform: #{options[:platform]}"
+puts " * builder: #{options[:builder]}"
+puts " * simulator_device: #{options[:device]}"
+puts " * simulator_UDID: #{udid}"
+puts " * simulator_os: #{options[:os]}"
+
+if options[:clean_build]
+  #
+  # Cleaning the project
+  puts
+  puts "==> Cleaning project: #{options[:project]}"
+  clean_project!(options[:builder], options[:project], options[:configuration], options[:platform])
+
+  puts
+  puts "==> Cleaning project: #{options[:test_project]}"
+  clean_project!(options[:builder], options[:test_project], options[:configuration], options[:platform])
 end
 
-# Building
+#
+# Build project
 puts
-puts "#{params.join(' ')}"
-system("#{params.join(' ')}")
-fail_with_message('Build failed') unless $?.success?
-puts
-
-build_path = Dir[File.join(project_root_directory, "/**/bin/#{options[:platform]}/#{options[:configuration]}")].first
-fail_with_message('failed to get build path') unless build_path
+puts "==> Building project: #{options[:project]}"
+build_path = build_project!(options[:builder], options[:project], options[:configuration], options[:platform])
+fail_with_message('Failed to locate build path') unless build_path
 
 app_path = export_app(build_path)
 fail_with_message('failed to get .app path') unless app_path
 puts "  (i) .app path: #{app_path}"
 
-test_build_path = Dir[File.join(project_root_directory, "/**/*.UITests/bin/#{options[:configuration]}")].first
+#
+# Build UITest
+puts
+puts "==> Building project: #{options[:test_project]}"
+test_build_path = build_project!(options[:builder], options[:test_project], options[:configuration], options[:platform])
 fail_with_message('failed to get test build path') unless test_build_path
 
 dll_path = export_dll(test_build_path)
 fail_with_message('failed to get .dll path') unless dll_path
 puts "  (i) .dll path: #{dll_path}"
 
+#
 # Copy .app to simulator
 puts
-puts "=> copy .app to simulator"
+puts '=> copy .app to simulator'
 copy_app_to_simulator!(simulator, app_path, xcode_version)
-puts '(i) .app successfully copied to simulator'
 
+#
 # Run unit test
 puts
-puts "=> run unit test"
+puts '=> run unit test'
 run_unit_test!(options[:nunit_path], dll_path)
-puts "(i) unit test successfully runned"
 
 # Set output envs
 work_dir = ENV['BITRISE_SOURCE_DIR']
 result_log = File.join(work_dir, 'TestResult.xml')
-`envman add --key BITRISE_XAMARIN_TEST_RESULT --value succeeded` if work_dir
-`envman add --key BITRISE_XAMARIN_TEST_FULL_RESULTS_TEXT --value #{result_log}` if work_dir
+system('envman add --key BITRISE_XAMARIN_TEST_RESULT --value succeeded') if work_dir
+system("envman add --key BITRISE_XAMARIN_TEST_FULL_RESULTS_TEXT --value #{result_log}") if work_dir

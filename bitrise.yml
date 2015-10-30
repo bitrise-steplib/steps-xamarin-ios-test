@@ -3,25 +3,27 @@ default_step_lib_source: https://github.com/bitrise-io/bitrise-steplib.git
 
 app:
   envs:
-  - SOLUTION_PATH: ${HOME}/Downloads/test/git/CreditCardValidator.iOS.sln
-  - BITRISE_XAMARIN_CONFIGURATION: Debug
-  - BITRISE_XAMARIN_PLATFORM: iPhone
-  - BITRISE_XAMARIN_BUILD_TOOL: mdtool
-  - SIMULATOR_DEVICE: "iPhone 6"
-  - SIMULATOR_OS_VERSION: "iOS 9.0"
+  - XAMARIN_PROJECT:
+  - XAMARIN_TEST_PROJECT:
+  - BITRISE_XAMARIN_CONFIGURATION:
+  - BITRISE_XAMARIN_PLATFORM:
+  - BITRISE_XAMARIN_BUILD_TOOL:
+  - SIMULATOR_DEVICE:
+  - SIMULATOR_OS_VERSION:
 
 workflows:
   test:
     steps:
     - path::./:
         inputs:
-        - xamarin_solution: ${SOLUTION_PATH}
+        - xamarin_project: ${XAMARIN_PROJECT}
+        - xamarin_test_project: ${XAMARIN_TEST_PROJECT}
         - xamarin_configuration: ${BITRISE_XAMARIN_CONFIGURATION}
         - xamarin_platform: ${BITRISE_XAMARIN_PLATFORM}
         - xamarin_builder: ${BITRISE_XAMARIN_BUILD_TOOL}
+        - is_clean_build: yes
         - simulator_device: ${SIMULATOR_DEVICE}
         - simulator_os_version: ${SIMULATOR_OS_VERSION}
-        - nunit_console_path: ${NUNIT_CONSOLE}
     - script:
         inputs:
         - content: |-

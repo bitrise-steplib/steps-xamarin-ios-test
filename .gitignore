@@ -1,2 +1,4 @@
 nunit-report.xml
 TestResult.xml
+.bitrise.secrets.yml
+
