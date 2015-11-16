@@ -17,6 +17,26 @@ def error_with_message(message)
   puts "\e[31m#{message}\e[0m"
 end
 
+def get_related_solutions(project_path)
+  project_name = File.basename(project_path)
+  project_dir = File.dirname(project_path)
+  root_dir = File.dirname(project_dir)
+  solutions = Dir[File.join(root_dir, '/**/*.sln')]
+  return [] unless solutions
+
+  related_solutions = []
+  solutions.each do |solution|
+    File.readlines(solution).join("\n").scan(/Project\(\"[^\"]*\"\)\s*=\s*\"[^\"]*\",\s*\"([^\"]*.csproj)\"/).each do |match|
+      a_project = match[0].strip.gsub(/\\/, '/')
+      a_project_name = File.basename(a_project)
+
+      related_solutions << solution if a_project_name == project_name
+    end
+  end
+
+  return related_solutions
+end
+
 def xcode_major_version!
   out = `xcodebuild -version`
   begin
@@ -81,6 +101,33 @@ def clean_project!(builder, project_path, configuration, platform)
     params << "\"#{project_path}\""
     params << '--target:Clean'
     params << "--configuration:\"#{configuration}|#{platform}\""
+  else
+    fail_with_message('Invalid build tool detected')
+  end
+
+  puts "#{params.join(' ')}"
+  system("#{params.join(' ')}")
+  fail_with_message('Clean failed') unless $?.success?
+end
+
+def clean_test_project!(builder, project_path, configuration, platform)
+  builders = {
+    'mdtool' => '/Applications/Xamarin Studio.app/Contents/MacOS/mdtool',
+    'xbuild' => '/Library/Frameworks/Mono.framework/Versions/Current/bin/xbuild'
+  }
+
+  # clean project
+  params = ["\"#{builders[builder]}\""]
+  case builder
+  when 'xbuild'
+    params << "\"#{project_path}\""
+    params << '/t:Clean'
+    params << "/p:Configuration=\"#{configuration}\""
+  when 'mdtool'
+    params << '-v build'
+    params << "\"#{project_path}\""
+    params << '--target:Clean'
+    params << "--configuration:\"#{configuration}\""
   else
     fail_with_message('Invalid build tool detected')
   end
@@ -312,6 +359,36 @@ puts " * simulator_device: #{options[:device]}"
 puts " * simulator_UDID: #{udid}"
 puts " * simulator_os: #{options[:os]}"
 
+#
+# Restoring nuget packages
+puts ''
+puts "==> Restoring nuget packages for project: #{options[:project]}"
+solutions = get_related_solutions(options[:project])
+if solutions && solutions.count > 0
+  solutions.each do |solution|
+    puts "(i) solution: #{solution}"
+    puts "/Library/Frameworks/Mono.framework/Versions/Current/bin/nuget restore #{solution}"
+    system("/Library/Frameworks/Mono.framework/Versions/Current/bin/nuget restore #{solution}")
+    error_with_message('Failed to restore nuget package') unless $?.success?
+  end
+else
+  puts "No solution found for project: #{options[:project]}, terminating nuget restore..."
+end
+
+puts ''
+puts "==> Restoring nuget packages for test project: #{options[:test_project]}"
+solutions = get_related_solutions(options[:test_project])
+if solutions && solutions.count > 0
+  solutions.each do |solution|
+    puts "(i) solution: #{solution}"
+    puts "/Library/Frameworks/Mono.framework/Versions/Current/bin/nuget restore #{solution}"
+    system("/Library/Frameworks/Mono.framework/Versions/Current/bin/nuget restore #{solution}")
+    error_with_message('Failed to restore nuget package') unless $?.success?
+  end
+else
+  puts "No solution found for test project: #{options[:test_project]}, terminating nuget restore..."
+end
+
 if options[:clean_build]
   #
   # Cleaning the project
@@ -320,8 +397,8 @@ if options[:clean_build]
   clean_project!(options[:builder], options[:project], options[:configuration], options[:platform])
 
   puts
-  puts "==> Cleaning project: #{options[:test_project]}"
-  clean_project!(options[:builder], options[:test_project], options[:configuration], options[:platform])
+  puts "==> Cleaning test project: #{options[:test_project]}"
+  clean_test_project!(options[:builder], options[:test_project], options[:configuration], options[:platform])
 end
 
 #
@@ -338,7 +415,7 @@ puts "  (i) .app path: #{app_path}"
 #
 # Build UITest
 puts
-puts "==> Building project: #{options[:test_project]}"
+puts "==> Building test project: #{options[:test_project]}"
 test_build_path = build_project!(options[:builder], options[:test_project], options[:configuration], options[:platform])
 fail_with_message('failed to get test build path') unless test_build_path
 
