@@ -76,7 +76,7 @@ inputs:
         * iPad Air
       is_required: true
       is_expand: true
-  - simulator_os_version: "iOS 9.1"
+  - simulator_os_version:
     opts:
       title: "OS version"
       description: |

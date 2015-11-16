@@ -48,23 +48,20 @@ def xcode_major_version!
 end
 
 def build_project!(builder, project_path, configuration, platform)
-  builders = {
-    'mdtool' => '/Applications/Xamarin Studio.app/Contents/MacOS/mdtool',
-    'xbuild' => '/Library/Frameworks/Mono.framework/Versions/Current/bin/xbuild'
-  }
-
   # Build project
   output_path = File.join('bin', platform, configuration)
 
-  params = ["\"#{builders[builder]}\""]
+  params = []
   case builder
   when 'xbuild'
+    params << "\"#{builder}\""
     params << "\"#{project_path}\""
     params << '/t:Build'
     params << "/p:Configuration=\"#{configuration}\""
     params << "/p:Platform=\"#{platform}\""
     params << "/p:OutputPath=\"#{output_path}/\""
   when 'mdtool'
+    params << "\"/Applications/Xamarin Studio.app/Contents/MacOS/mdtool\""
     params << '-v build'
     params << "\"#{project_path}\""
     params << "--configuration:\"#{configuration}|#{platform}\""
@@ -83,20 +80,17 @@ def build_project!(builder, project_path, configuration, platform)
 end
 
 def clean_project!(builder, project_path, configuration, platform)
-  builders = {
-    'mdtool' => '/Applications/Xamarin Studio.app/Contents/MacOS/mdtool',
-    'xbuild' => '/Library/Frameworks/Mono.framework/Versions/Current/bin/xbuild'
-  }
-
   # clean project
-  params = ["\"#{builders[builder]}\""]
+  params = []
   case builder
   when 'xbuild'
+    params << "\"#{builder}\""
     params << "\"#{project_path}\""
     params << '/t:Clean'
     params << "/p:Configuration=\"#{configuration}\""
     params << "/p:Platform=\"#{platform}\""
   when 'mdtool'
+    params << "\"/Applications/Xamarin Studio.app/Contents/MacOS/mdtool\""
     params << '-v build'
     params << "\"#{project_path}\""
     params << '--target:Clean'
@@ -111,19 +105,16 @@ def clean_project!(builder, project_path, configuration, platform)
 end
 
 def clean_test_project!(builder, project_path, configuration, platform)
-  builders = {
-    'mdtool' => '/Applications/Xamarin Studio.app/Contents/MacOS/mdtool',
-    'xbuild' => '/Library/Frameworks/Mono.framework/Versions/Current/bin/xbuild'
-  }
-
   # clean project
-  params = ["\"#{builders[builder]}\""]
+  params = []
   case builder
   when 'xbuild'
+    params << "\"#{builder}\""
     params << "\"#{project_path}\""
     params << '/t:Clean'
     params << "/p:Configuration=\"#{configuration}\""
   when 'mdtool'
+    params << "\"/Applications/Xamarin Studio.app/Contents/MacOS/mdtool\""
     params << '-v build'
     params << "\"#{project_path}\""
     params << '--target:Clean'
