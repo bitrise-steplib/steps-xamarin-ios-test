@@ -2,6 +2,10 @@ require 'optparse'
 require 'pathname'
 require 'timeout'
 
+@mdtool = "\"/Applications/Xamarin Studio.app/Contents/MacOS/mdtool\""
+@mono = '/Library/Frameworks/Mono.framework/Versions/Current/bin/mono'
+@nuget = '/Library/Frameworks/Mono.framework/Versions/Current/bin/nuget'
+
 # -----------------------
 # --- functions
 # -----------------------
@@ -61,7 +65,7 @@ def build_project!(builder, project_path, configuration, platform, is_test)
     params << "/p:Platform=\"#{platform}\"" unless is_test
     params << "/p:OutputPath=\"#{output_path}/\""
   when 'mdtool'
-    params << "\"/Applications/Xamarin Studio.app/Contents/MacOS/mdtool\""
+    params << "#{@mdtool}"
     params << '-v build'
     params << "\"#{project_path}\""
     param_configuration = "--configuration:\"#{configuration}\""
@@ -92,7 +96,7 @@ def clean_project!(builder, project_path, configuration, platform, is_test)
     params << "/p:Configuration=\"#{configuration}\""
     params << "/p:Platform=\"#{platform}\"" unless is_test
   when 'mdtool'
-    params << "\"/Applications/Xamarin Studio.app/Contents/MacOS/mdtool\""
+    params << "#{@mdtool}"
     params << '-v build'
     params << "\"#{project_path}\""
     params << '--target:Clean'
@@ -233,17 +237,14 @@ def copy_app_to_simulator!(simulator, app_path, xcode_major_version)
 end
 
 def run_unit_test!(nunit_console_path, dll_path)
-  mono = '/Library/Frameworks/Mono.framework/Versions/Current/bin/mono'
-  out = `#{mono} #{nunit_console_path} #{dll_path}`
-  puts out
-  fail_with_message("#{mono} #{nunit_console_path} #{dll_path} -- failed") unless $?.success?
+  # nunit-console.exe Test.dll /xml=Test-results.xml /out=Test-output.txt
 
-  regex = 'Tests run: (?<total>\d*), Errors: (?<errors>\d*), Failures: (?<failures>\d*), Inconclusive: (?<inconclusives>\d*), Time: (?<time>\S*) seconds\n  Not run: (?<not_run>\d*), Invalid: (?<invalid>\d*), Ignored: (?<ignored>\d*), Skipped: (?<skipped>\d*)'
-  match = out.match(regex)
-  unless match.nil?
-    _total, errors, failures, _inconclusives, _time, _not_run, _invalid, _ignored, _skipped = match.captures
-    fail_with_message("#{mono} #{nunit_console_path} #{dll_path} -- failed") unless errors.to_i == 0 && failures.to_i == 0
-  end
+  nunit_path = ENV['NUNIT_PATH']
+  fail_with_message('No NUNIT_PATH environment specified') unless nunit_path
+
+  nunit_console_path = File.join(nunit_path, 'bin/nunit3-console.exe')
+  system("#{@mono} #{nunit_console_path} #{dll_path}")
+  fail_with_message("#{@mono} #{nunit_console_path} #{dll_path} -- failed") unless $?.success?
 end
 
 # -----------------------
@@ -274,21 +275,19 @@ parser = OptionParser.new do|opts|
   opts.on('-i', '--clean build', 'Clean build') { |i| options[:clean_build] = false if i.to_s == 'no' }
   opts.on('-d', '--device device', 'Device') { |d| options[:device] = d unless d.to_s == '' }
   opts.on('-o', '--os os', 'OS') { |o| options[:os] = o unless o.to_s == '' }
-  opts.on('-n', '--nunit path', 'NUnit path') { |n| options[:nunit_path] = n unless n.to_s == '' }
   opts.on('-h', '--help', 'Displays Help') do
     exit
   end
 end
 parser.parse!
 
-fail_with_message('project not specified') unless options[:project]
-fail_with_message('test_project not specified') unless options[:test_project]
+fail_with_message('No project file found') unless options[:project] && File.exist?(options[:project])
+fail_with_message('No test_project file found') unless options[:test_project] && File.exist?(options[:test_project])
 fail_with_message('configuration not specified') unless options[:configuration]
 fail_with_message('platform not specified') unless options[:platform]
 fail_with_message('builder not specified') unless options[:builder]
 fail_with_message('simulator_device not specified') unless options[:device]
 fail_with_message('simulator_os_version not specified') unless options[:os]
-fail_with_message('nunit_console_path not specified') unless options[:nunit_path]
 
 udid, state = simulator_udid_and_state(options[:device], options[:os])
 fail_with_message('failed to get simulator udid') unless udid || state
@@ -326,6 +325,7 @@ puts " * test_project: #{options[:test_project]}"
 puts " * configuration: #{options[:configuration]}"
 puts " * platform: #{options[:platform]}"
 puts " * builder: #{options[:builder]}"
+puts " * clean_build: #{options[:clean_build]}"
 puts " * simulator_device: #{options[:device]}"
 puts " * simulator_UDID: #{udid}"
 puts " * simulator_os: #{options[:os]}"
@@ -333,31 +333,19 @@ puts " * simulator_os: #{options[:os]}"
 #
 # Restoring nuget packages
 puts ''
-puts "==> Restoring nuget packages for project: #{options[:project]}"
-solutions = get_related_solutions(options[:project])
-if solutions && solutions.count > 0
-  solutions.each do |solution|
-    puts "(i) solution: #{solution}"
-    puts "/Library/Frameworks/Mono.framework/Versions/Current/bin/nuget restore #{solution}"
-    system("/Library/Frameworks/Mono.framework/Versions/Current/bin/nuget restore #{solution}")
-    error_with_message('Failed to restore nuget package') unless $?.success?
-  end
-else
-  puts "No solution found for project: #{options[:project]}, terminating nuget restore..."
-end
+puts '==> Restoring nuget packages'
+project_solutions = get_related_solutions(options[:project])
+puts "No solution found for project: #{options[:project]}, terminating nuget restore..." if project_solutions.empty?
 
-puts ''
-puts "==> Restoring nuget packages for test project: #{options[:test_project]}"
-solutions = get_related_solutions(options[:test_project])
-if solutions && solutions.count > 0
-  solutions.each do |solution|
-    puts "(i) solution: #{solution}"
-    puts "/Library/Frameworks/Mono.framework/Versions/Current/bin/nuget restore #{solution}"
-    system("/Library/Frameworks/Mono.framework/Versions/Current/bin/nuget restore #{solution}")
-    error_with_message('Failed to restore nuget package') unless $?.success?
-  end
-else
-  puts "No solution found for test project: #{options[:test_project]}, terminating nuget restore..."
+test_project_solutions = get_related_solutions(options[:test_project])
+puts "No solution found for project: #{options[:test_project]}, terminating nuget restore..." if test_project_solutions.empty?
+
+solutions = project_solutions | test_project_solutions
+solutions.each do |solution|
+  puts "(i) solution: #{solution}"
+  puts "#{@nuget} restore #{solution}"
+  system("#{@nuget} restore #{solution}")
+  error_with_message('Failed to restore nuget package') unless $?.success?
 end
 
 if options[:clean_build]
