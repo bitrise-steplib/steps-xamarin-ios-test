@@ -233,17 +233,12 @@ def copy_app_to_simulator!(simulator, app_path, xcode_major_version)
 end
 
 def run_unit_test!(nunit_console_path, dll_path)
-  mono = '/Library/Frameworks/Mono.framework/Versions/Current/bin/mono'
-  out = `#{mono} #{nunit_console_path} #{dll_path}`
-  puts out
-  fail_with_message("#{mono} #{nunit_console_path} #{dll_path} -- failed") unless $?.success?
+  # nunit-console.exe Test.dll /xml=Test-results.xml /out=Test-output.txt
 
-  regex = 'Tests run: (?<total>\d*), Errors: (?<errors>\d*), Failures: (?<failures>\d*), Inconclusive: (?<inconclusives>\d*), Time: (?<time>\S*) seconds\n  Not run: (?<not_run>\d*), Invalid: (?<invalid>\d*), Ignored: (?<ignored>\d*), Skipped: (?<skipped>\d*)'
-  match = out.match(regex)
-  unless match.nil?
-    _total, errors, failures, _inconclusives, _time, _not_run, _invalid, _ignored, _skipped = match.captures
-    fail_with_message("#{mono} #{nunit_console_path} #{dll_path} -- failed") unless errors.to_i == 0 && failures.to_i == 0
-  end
+  mono = '/Library/Frameworks/Mono.framework/Versions/Current/bin/mono'
+  nunit_console_path = '/Users/godrei/.nunit/NUnit-3.0.0/bin/nunit3-console.exe'
+  system("#{mono} #{nunit_console_path} #{dll_path}")
+  fail_with_message("#{mono} #{nunit_console_path} #{dll_path} -- failed") unless $?.success?
 end
 
 # -----------------------
@@ -274,7 +269,6 @@ parser = OptionParser.new do|opts|
   opts.on('-i', '--clean build', 'Clean build') { |i| options[:clean_build] = false if i.to_s == 'no' }
   opts.on('-d', '--device device', 'Device') { |d| options[:device] = d unless d.to_s == '' }
   opts.on('-o', '--os os', 'OS') { |o| options[:os] = o unless o.to_s == '' }
-  opts.on('-n', '--nunit path', 'NUnit path') { |n| options[:nunit_path] = n unless n.to_s == '' }
   opts.on('-h', '--help', 'Displays Help') do
     exit
   end
@@ -288,7 +282,6 @@ fail_with_message('platform not specified') unless options[:platform]
 fail_with_message('builder not specified') unless options[:builder]
 fail_with_message('simulator_device not specified') unless options[:device]
 fail_with_message('simulator_os_version not specified') unless options[:os]
-fail_with_message('nunit_console_path not specified') unless options[:nunit_path]
 
 udid, state = simulator_udid_and_state(options[:device], options[:os])
 fail_with_message('failed to get simulator udid') unless udid || state
