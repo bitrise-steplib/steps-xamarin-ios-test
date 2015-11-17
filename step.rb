@@ -47,7 +47,7 @@ def xcode_major_version!
   version
 end
 
-def build_project!(builder, project_path, configuration, platform)
+def build_project!(builder, project_path, configuration, platform, is_test)
   # Build project
   output_path = File.join('bin', platform, configuration)
 
@@ -58,13 +58,15 @@ def build_project!(builder, project_path, configuration, platform)
     params << "\"#{project_path}\""
     params << '/t:Build'
     params << "/p:Configuration=\"#{configuration}\""
-    params << "/p:Platform=\"#{platform}\""
+    params << "/p:Platform=\"#{platform}\"" unless is_test
     params << "/p:OutputPath=\"#{output_path}/\""
   when 'mdtool'
     params << "\"/Applications/Xamarin Studio.app/Contents/MacOS/mdtool\""
     params << '-v build'
     params << "\"#{project_path}\""
-    params << "--configuration:\"#{configuration}|#{platform}\""
+    param_configuration = "--configuration:\"#{configuration}\""
+    param_configuration += "|\"#{platform}\"" unless is_test
+    params << param_configuration
     params << '--target:Build'
   else
     fail_with_message('Invalid build tool detected')
@@ -79,7 +81,7 @@ def build_project!(builder, project_path, configuration, platform)
   File.join(project_directory, output_path)
 end
 
-def clean_project!(builder, project_path, configuration, platform)
+def clean_project!(builder, project_path, configuration, platform, is_test)
   # clean project
   params = []
   case builder
@@ -88,37 +90,15 @@ def clean_project!(builder, project_path, configuration, platform)
     params << "\"#{project_path}\""
     params << '/t:Clean'
     params << "/p:Configuration=\"#{configuration}\""
-    params << "/p:Platform=\"#{platform}\""
+    params << "/p:Platform=\"#{platform}\"" unless is_test
   when 'mdtool'
     params << "\"/Applications/Xamarin Studio.app/Contents/MacOS/mdtool\""
     params << '-v build'
     params << "\"#{project_path}\""
     params << '--target:Clean'
-    params << "--configuration:\"#{configuration}|#{platform}\""
-  else
-    fail_with_message('Invalid build tool detected')
-  end
-
-  puts "#{params.join(' ')}"
-  system("#{params.join(' ')}")
-  fail_with_message('Clean failed') unless $?.success?
-end
-
-def clean_test_project!(builder, project_path, configuration, platform)
-  # clean project
-  params = []
-  case builder
-  when 'xbuild'
-    params << "\"#{builder}\""
-    params << "\"#{project_path}\""
-    params << '/t:Clean'
-    params << "/p:Configuration=\"#{configuration}\""
-  when 'mdtool'
-    params << "\"/Applications/Xamarin Studio.app/Contents/MacOS/mdtool\""
-    params << '-v build'
-    params << "\"#{project_path}\""
-    params << '--target:Clean'
-    params << "--configuration:\"#{configuration}\""
+    param_configuration = "--configuration:\"#{configuration}\""
+    param_configuration += "|\"#{platform}\"" unless is_test
+    params << param_configuration
   else
     fail_with_message('Invalid build tool detected')
   end
@@ -385,18 +365,18 @@ if options[:clean_build]
   # Cleaning the project
   puts
   puts "==> Cleaning project: #{options[:project]}"
-  clean_project!(options[:builder], options[:project], options[:configuration], options[:platform])
+  clean_project!(options[:builder], options[:project], options[:configuration], options[:platform], false)
 
   puts
   puts "==> Cleaning test project: #{options[:test_project]}"
-  clean_test_project!(options[:builder], options[:test_project], options[:configuration], options[:platform])
+  clean_project!(options[:builder], options[:test_project], options[:configuration], options[:platform], true)
 end
 
 #
 # Build project
 puts
 puts "==> Building project: #{options[:project]}"
-build_path = build_project!(options[:builder], options[:project], options[:configuration], options[:platform])
+build_path = build_project!(options[:builder], options[:project], options[:configuration], options[:platform], false)
 fail_with_message('Failed to locate build path') unless build_path
 
 app_path = export_app(build_path)
@@ -407,7 +387,7 @@ puts "  (i) .app path: #{app_path}"
 # Build UITest
 puts
 puts "==> Building test project: #{options[:test_project]}"
-test_build_path = build_project!(options[:builder], options[:test_project], options[:configuration], options[:platform])
+test_build_path = build_project!(options[:builder], options[:test_project], options[:configuration], options[:platform], true)
 fail_with_message('failed to get test build path') unless test_build_path
 
 dll_path = export_dll(test_build_path)
