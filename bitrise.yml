@@ -21,7 +21,7 @@ workflows:
         - xamarin_configuration: ${BITRISE_XAMARIN_CONFIGURATION}
         - xamarin_platform: ${BITRISE_XAMARIN_PLATFORM}
         - xamarin_builder: ${BITRISE_XAMARIN_BUILD_TOOL}
-        - is_clean_build: yes
+        - is_clean_build: "yes"
         - simulator_device: ${SIMULATOR_DEVICE}
         - simulator_os_version: ${SIMULATOR_OS_VERSION}
     - script:

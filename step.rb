@@ -51,26 +51,24 @@ def xcode_major_version!
   version
 end
 
-def build_project!(builder, project_path, configuration, platform, is_test)
+def build_project!(builder, project_path, configuration, platform)
   # Build project
   output_path = File.join('bin', platform, configuration)
 
   params = []
   case builder
   when 'xbuild'
-    params << "\"#{builder}\""
+    params << 'xbuild'
     params << "\"#{project_path}\""
     params << '/t:Build'
     params << "/p:Configuration=\"#{configuration}\""
-    params << "/p:Platform=\"#{platform}\"" unless is_test
+    params << "/p:Platform=\"#{platform}\""
     params << "/p:OutputPath=\"#{output_path}/\""
   when 'mdtool'
     params << "#{@mdtool}"
     params << '-v build'
     params << "\"#{project_path}\""
-    param_configuration = "--configuration:\"#{configuration}\""
-    param_configuration += "|\"#{platform}\"" unless is_test
-    params << param_configuration
+    params << "--configuration:\"#{configuration}\"|\"#{platform}\""
     params << '--target:Build'
   else
     fail_with_message('Invalid build tool detected')
@@ -90,7 +88,7 @@ def clean_project!(builder, project_path, configuration, platform, is_test)
   params = []
   case builder
   when 'xbuild'
-    params << "\"#{builder}\""
+    params << 'xbuild'
     params << "\"#{project_path}\""
     params << '/t:Clean'
     params << "/p:Configuration=\"#{configuration}\""
@@ -242,7 +240,7 @@ def run_unit_test!(nunit_console_path, dll_path)
   nunit_path = ENV['NUNIT_PATH']
   fail_with_message('No NUNIT_PATH environment specified') unless nunit_path
 
-  nunit_console_path = File.join(nunit_path, 'bin/nunit3-console.exe')
+  nunit_console_path = File.join(nunit_path, 'nunit3-console.exe')
   system("#{@mono} #{nunit_console_path} #{dll_path}")
   fail_with_message("#{@mono} #{nunit_console_path} #{dll_path} -- failed") unless $?.success?
 end
@@ -300,20 +298,6 @@ simulator = {
 
 ENV['IOS_SIMULATOR_UDID'] = udid
 
-if options[:platform] != 'iPhoneSimulator'
-  puts ''
-  puts "(!) Given platform: \'#{options[:platform]}\', but unit test requires platform \'iPhoneSimulator\'"
-  puts '(!) Change platform to \'iPhoneSimulator\'...'
-  options[:platform] = 'iPhoneSimulator'
-end
-
-if options[:configuration] != 'Debug'
-  puts ''
-  puts "(!) Given configuration: \'#{options[:configuration]}\', but unit test requires configuration \'Debug\'"
-  puts '(!) Change configuration to \'Debug\'...'
-  options[:configuration] = 'Debug'
-end
-
 xcode_version = xcode_major_version!
 
 #
@@ -364,7 +348,7 @@ end
 # Build project
 puts
 puts "==> Building project: #{options[:project]}"
-build_path = build_project!(options[:builder], options[:project], options[:configuration], options[:platform], false)
+build_path = build_project!(options[:builder], options[:project], options[:configuration], options[:platform])
 fail_with_message('Failed to locate build path') unless build_path
 
 app_path = export_app(build_path)
@@ -375,7 +359,7 @@ puts "  (i) .app path: #{app_path}"
 # Build UITest
 puts
 puts "==> Building test project: #{options[:test_project]}"
-test_build_path = build_project!(options[:builder], options[:test_project], options[:configuration], options[:platform], true)
+test_build_path = build_project!(options[:builder], options[:test_project], options[:configuration], options[:platform])
 fail_with_message('failed to get test build path') unless test_build_path
 
 dll_path = export_dll(test_build_path)
@@ -394,6 +378,7 @@ puts
 puts '=> run unit test'
 run_unit_test!(options[:nunit_path], dll_path)
 
+#
 # Set output envs
 work_dir = ENV['BITRISE_SOURCE_DIR']
 result_log = File.join(work_dir, 'TestResult.xml')
