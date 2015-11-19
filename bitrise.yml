@@ -16,16 +16,16 @@ workflows:
     steps:
     - path::./:
         inputs:
-        - xamarin_project: ${XAMARIN_PROJECT}
-        - xamarin_test_project: ${XAMARIN_TEST_PROJECT}
-        - xamarin_configuration: ${BITRISE_XAMARIN_CONFIGURATION}
-        - xamarin_platform: ${BITRISE_XAMARIN_PLATFORM}
-        - xamarin_builder: ${BITRISE_XAMARIN_BUILD_TOOL}
-        - is_clean_build: "yes"
-        - simulator_device: ${SIMULATOR_DEVICE}
-        - simulator_os_version: ${SIMULATOR_OS_VERSION}
+        - xamarin_project: $XAMARIN_PROJECT
+        - xamarin_test_project: $XAMARIN_TEST_PROJECT
+        - xamarin_configuration: $BITRISE_XAMARIN_CONFIGURATION
+        - xamarin_platform: $BITRISE_XAMARIN_PLATFORM
+        - xamarin_builder: $BITRISE_XAMARIN_BUILD_TOOL
+        - is_clean_build: yes
+        - simulator_device: $SIMULATOR_DEVICE
+        - simulator_os_version: $SIMULATOR_OS_VERSION
     - script:
         inputs:
         - content: |-
-            echo "BITRISE_XAMARIN_TEST_RESULT: ${BITRISE_XAMARIN_TEST_RESULT}"
-            echo "BITRISE_XAMARIN_TEST_FULL_RESULTS_TEXT: ${BITRISE_XAMARIN_TEST_FULL_RESULTS_TEXT}"
+            echo "BITRISE_XAMARIN_TEST_RESULT: $BITRISE_XAMARIN_TEST_RESULT"
+            echo "BITRISE_XAMARIN_TEST_FULL_RESULTS_TEXT: $BITRISE_XAMARIN_TEST_FULL_RESULTS_TEXT"
