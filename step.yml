@@ -30,14 +30,14 @@ inputs:
         Path to Xamarin UITest Project
       is_required: true
       is_expand: true
-  - xamarin_configuration:
+  - xamarin_configuration: "Debug"
     opts:
       title: Xamarin project configuration
       description: |
         Xamarin project configuration
       is_required: true
       is_expand: true
-  - xamarin_platform:
+  - xamarin_platform: "iPhoneSimulator"
     opts:
       title: Xamarin platform
       description: |
