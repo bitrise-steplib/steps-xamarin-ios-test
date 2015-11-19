@@ -21,6 +21,12 @@ def error_with_message(message)
   puts "\e[31m#{message}\e[0m"
 end
 
+def to_bool(value)
+  return true if value == true || value =~ (/^(true|t|yes|y|1)$/i)
+  return false if value == false || value.nil? || value == '' || value =~ (/^(false|f|no|n|0)$/i)
+  fail_with_message("Invalid value for Boolean: \"#{value}\"")
+end
+
 def get_related_solutions(project_path)
   project_name = File.basename(project_path)
   project_dir = File.dirname(project_path)
@@ -233,7 +239,7 @@ def copy_app_to_simulator!(simulator, app_path, xcode_major_version)
   fail_with_message("xcrun simctl install #{simulator[:udid]} #{app_path} -- failed") unless $?.success?
 end
 
-def run_unit_test!(nunit_console_path, dll_path)
+def run_unit_test!(dll_path)
   # nunit-console.exe Test.dll /xml=Test-results.xml /out=Test-output.txt
 
   nunit_path = ENV['NUNIT_PATH']
@@ -268,8 +274,7 @@ options = {
   builder: nil,
   clean_build: true,
   device: nil,
-  os: nil,
-  nunit_path: nil
+  os: nil
 }
 
 parser = OptionParser.new do|opts|
@@ -279,7 +284,7 @@ parser = OptionParser.new do|opts|
   opts.on('-c', '--configuration config', 'Configuration') { |c| options[:configuration] = c unless c.to_s == '' }
   opts.on('-p', '--platform platform', 'Platform') { |p| options[:platform] = p unless p.to_s == '' }
   opts.on('-b', '--builder builder', 'Builder') { |b| options[:builder] = b unless b.to_s == '' }
-  opts.on('-i', '--clean build', 'Clean build') { |i| options[:clean_build] = false if i.to_s == 'no' }
+  opts.on('-i', '--clean build', 'Clean build') { |i| options[:clean_build] = false if to_bool(i) == false }
   opts.on('-d', '--device device', 'Device') { |d| options[:device] = d unless d.to_s == '' }
   opts.on('-o', '--os os', 'OS') { |o| options[:os] = o unless o.to_s == '' }
   opts.on('-h', '--help', 'Displays Help') do
@@ -385,7 +390,7 @@ copy_app_to_simulator!(simulator, app_path, xcode_version)
 # Run unit test
 puts
 puts '=> run unit test'
-run_unit_test!(options[:nunit_path], dll_path)
+run_unit_test!(dll_path)
 
 #
 # Set output envs
