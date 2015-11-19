@@ -68,7 +68,7 @@ def build_project!(builder, project_path, configuration, platform)
     params << "#{@mdtool}"
     params << '-v build'
     params << "\"#{project_path}\""
-    params << "--configuration:\"#{configuration}\"|\"#{platform}\""
+    params << "--configuration:\"#{configuration}|#{platform}\""
     params << '--target:Build'
   else
     fail_with_message('Invalid build tool detected')
@@ -98,9 +98,8 @@ def clean_project!(builder, project_path, configuration, platform, is_test)
     params << '-v build'
     params << "\"#{project_path}\""
     params << '--target:Clean'
-    param_configuration = "--configuration:\"#{configuration}\""
-    param_configuration += "|\"#{platform}\"" unless is_test
-    params << param_configuration
+    params << "--configuration:\"#{configuration}|#{platform}\"" unless is_test
+    params << "--configuration:\"#{configuration}\"" if is_test
   else
     fail_with_message('Invalid build tool detected')
   end

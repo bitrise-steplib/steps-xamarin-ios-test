@@ -2,9 +2,9 @@ title: "Xamarin iOS Test"
 summary: Xamarin iOS Test
 description: |-
   Xamarin iOS Test
-website: https://github.com/bitrise-io/steps-xamarin-test
-source_code_url: https://github.com/bitrise-io/steps-xamarin-test
-support_url: https://github.com/bitrise-io/steps-xamarin-test/issues
+website: https://github.com/bitrise-io/steps-xamarin-ios-test
+source_code_url: https://github.com/bitrise-io/steps-xamarin-ios-test
+support_url: https://github.com/bitrise-io/steps-xamarin-ios-test/issues
 host_os_tags:
   - osx-10.10
 project_type_tags:
@@ -30,26 +30,26 @@ inputs:
         Path to Xamarin UITest Project
       is_required: true
       is_expand: true
-  - xamarin_configuration: "Debug"
+  - xamarin_configuration: Debug
     opts:
       title: Xamarin project configuration
       description: |
         Xamarin project configuration
       is_required: true
       is_expand: true
-  - xamarin_platform: "iPhoneSimulator"
+  - xamarin_platform: iPhoneSimulator
     opts:
       title: Xamarin platform
       description: |
         Xamarin platform
       is_required: true
       is_expand: true
-  - is_clean_build: "yes"
+  - is_clean_build: yes
     opts:
       title: "Do a clean before the archive?"
       value_options:
-        - "yes"
-        - "no"
+        - yes
+        - no
       is_required: true
       is_expand: true
       is_dont_change_value: false
