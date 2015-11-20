@@ -27,26 +27,6 @@ def to_bool(value)
   fail_with_message("Invalid value for Boolean: \"#{value}\"")
 end
 
-def get_related_solutions(project_path)
-  project_name = File.basename(project_path)
-  project_dir = File.dirname(project_path)
-  root_dir = File.dirname(project_dir)
-  solutions = Dir[File.join(root_dir, '/**/*.sln')]
-  return [] unless solutions
-
-  related_solutions = []
-  solutions.each do |solution|
-    File.readlines(solution).join("\n").scan(/Project\(\"[^\"]*\"\)\s*=\s*\"[^\"]*\",\s*\"([^\"]*.csproj)\"/).each do |match|
-      a_project = match[0].strip.gsub(/\\/, '/')
-      a_project_name = File.basename(a_project)
-
-      related_solutions << solution if a_project_name == project_name
-    end
-  end
-
-  return related_solutions
-end
-
 def xcode_major_version!
   out = `xcodebuild -version`
   begin
@@ -327,24 +307,6 @@ puts " * clean_build: #{options[:clean_build]}"
 puts " * simulator_device: #{options[:device]}"
 puts " * simulator_UDID: #{udid}"
 puts " * simulator_os: #{options[:os]}"
-
-#
-# Restoring nuget packages
-puts ''
-puts '==> Restoring nuget packages'
-project_solutions = get_related_solutions(options[:project])
-puts "No solution found for project: #{options[:project]}, terminating nuget restore..." if project_solutions.empty?
-
-test_project_solutions = get_related_solutions(options[:test_project])
-puts "No solution found for project: #{options[:test_project]}, terminating nuget restore..." if test_project_solutions.empty?
-
-solutions = project_solutions | test_project_solutions
-solutions.each do |solution|
-  puts "(i) solution: #{solution}"
-  puts "#{@nuget} restore #{solution}"
-  system("#{@nuget} restore #{solution}")
-  error_with_message('Failed to restore nuget package') unless $?.success?
-end
 
 if options[:clean_build]
   #
