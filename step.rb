@@ -165,7 +165,7 @@ def shutdown_simulator!(xcode_major_version)
   fail_with_message("#{shut_down_cmd} -- failed") unless $?.success?
 
   begin
-    Timeout.timeout(60) do
+    Timeout.timeout(120) do
       loop do
         sleep 1 # second
         all_has_shutdown_state = simulators_has_shutdown_state?
@@ -188,7 +188,7 @@ def boot_simulator!(simulator, xcode_major_version)
   fail_with_message("open \"#{simulator_cmd}\" --args -CurrentDeviceUDID #{simulator[:udid]} -- failed") unless $?.success?
 
   begin
-    Timeout.timeout(60) do
+    Timeout.timeout(120) do
       loop do
         sleep 1 # seconds
         out = `xcrun simctl openurl #{simulator[:udid]} https://www.google.com 2>&1`
