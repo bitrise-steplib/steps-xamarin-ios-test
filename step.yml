@@ -94,5 +94,5 @@ outputs:
     - failed
 - BITRISE_XAMARIN_TEST_FULL_RESULTS_TEXT:
   opts:
-    title: ""
+    title: Result of the tests.
     description: ""
