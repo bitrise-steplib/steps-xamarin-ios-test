@@ -2,13 +2,13 @@ title: "Xamarin iOS Test"
 summary: Xamarin iOS Test
 description: |-
   Xamarin iOS Test
-website: https://github.com/bitrise-io/steps-xamarin-ios-test
-source_code_url: https://github.com/bitrise-io/steps-xamarin-ios-test
-support_url: https://github.com/bitrise-io/steps-xamarin-ios-test/issues
+website: https://github.com/bitrise-steplib/steps-xamarin-ios-test
+source_code_url: https://github.com/bitrise-steplib/steps-xamarin-ios-test
+support_url: https://github.com/bitrise-steplib/steps-xamarin-ios-test/issues
 host_os_tags:
   - osx-10.10
 project_type_tags:
-  - ios
+  - xamarin
 type_tags: []
 is_requires_admin_user: false
 is_always_run: false
@@ -16,7 +16,7 @@ is_skippable: false
 dependencies: []
 run_if: ""
 inputs:
-  - xamarin_project:
+  - xamarin_project: $BITRISE_PROJECT_PATH
     opts:
       title: Path to Xamarin Project
       description: |
@@ -53,7 +53,7 @@ inputs:
       is_required: true
       is_expand: true
       is_dont_change_value: false
-  - xamarin_builder:
+  - xamarin_builder: xbuild
     opts:
       title: Build tool
       value_options:
