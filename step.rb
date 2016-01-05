@@ -2,6 +2,8 @@ require 'optparse'
 require 'pathname'
 require 'timeout'
 
+require_relative 'xamarin-builder/builder'
+
 @mdtool = "\"/Applications/Xamarin Studio.app/Contents/MacOS/mdtool\""
 @mono = '/Library/Frameworks/Mono.framework/Versions/Current/bin/mono'
 @nuget = '/Library/Frameworks/Mono.framework/Versions/Current/bin/nuget'
@@ -37,69 +39,12 @@ def xcode_major_version!
   version
 end
 
-def build_project!(builder, project_path, configuration, platform)
-  # Build project
-  output_path = File.join('bin', platform, configuration)
-
-  params = []
-  case builder
-  when 'xbuild'
-    params << 'xbuild'
-    params << "\"#{project_path}\""
-    params << '/t:Build'
-    params << "/p:Configuration=\"#{configuration}\""
-    params << "/p:Platform=\"#{platform}\""
-    params << "/p:OutputPath=\"#{output_path}/\""
-  when 'mdtool'
-    params << "#{@mdtool}"
-    params << '-v build'
-    params << "\"#{project_path}\""
-    params << "--configuration:\"#{configuration}|#{platform}\""
-    params << '--target:Build'
-  else
-    fail_with_message('Invalid build tool detected')
-  end
-
-  puts "#{params.join(' ')}"
-  system("#{params.join(' ')}")
-  fail_with_message('Build failed') unless $?.success?
-
-  # Get the build path
-  project_directory = File.dirname(project_path)
-  File.join(project_directory, output_path)
-end
-
-def clean_project!(builder, project_path, configuration, platform, is_test)
-  # clean project
-  params = []
-  case builder
-  when 'xbuild'
-    params << 'xbuild'
-    params << "\"#{project_path}\""
-    params << '/t:Clean'
-    params << "/p:Configuration=\"#{configuration}\""
-    params << "/p:Platform=\"#{platform}\"" unless is_test
-  when 'mdtool'
-    params << "#{@mdtool}"
-    params << '-v build'
-    params << "\"#{project_path}\""
-    params << '--target:Clean'
-    params << "--configuration:\"#{configuration}|#{platform}\"" unless is_test
-    params << "--configuration:\"#{configuration}\"" if is_test
-  else
-    fail_with_message('Invalid build tool detected')
-  end
-
-  puts "#{params.join(' ')}"
-  system("#{params.join(' ')}")
-  fail_with_message('Clean failed') unless $?.success?
-end
-
 def simulator_udid_and_state(simulator_device, os_version)
   os_found = false
   os_regex = "-- #{os_version} --"
   os_separator_regex = '-- iOS \d.\d --'
   device_regex = "#{simulator_device}" + '\s*\(([\w|-]*)\)\s*\(([\w]*)\)'
+
   out = `xcrun simctl list | grep -i --invert-match 'unavailable'`
   out.each_line do |line|
     os_separator_match = line.match(os_separator_regex)
@@ -131,26 +76,6 @@ def simulators_has_shutdown_state?
     end
   end
   all_has_shutdown_state
-end
-
-def export_app(build_path)
-  app_path = Dir[File.join(build_path, '/**/*.app')].first
-  return nil unless app_path
-
-  full_path = Pathname.new(app_path).realpath.to_s
-  return nil unless full_path
-  return nil unless File.exist? full_path
-  full_path
-end
-
-def export_dll(test_build_path)
-  dll_path = Dir[File.join(test_build_path, '/**/*.dll')].first
-  return nil unless dll_path
-
-  full_path = Pathname.new(dll_path).realpath.to_s
-  return nil unless full_path
-  return nil unless File.exist? full_path
-  full_path
 end
 
 def shutdown_simulator!(xcode_major_version)
@@ -273,27 +198,6 @@ parser = OptionParser.new do|opts|
 end
 parser.parse!
 
-fail_with_message('No project file found') unless options[:project] && File.exist?(options[:project])
-fail_with_message('No test_project file found') unless options[:test_project] && File.exist?(options[:test_project])
-fail_with_message('configuration not specified') unless options[:configuration]
-fail_with_message('platform not specified') unless options[:platform]
-fail_with_message('builder not specified') unless options[:builder]
-fail_with_message('simulator_device not specified') unless options[:device]
-fail_with_message('simulator_os_version not specified') unless options[:os]
-
-udid, state = simulator_udid_and_state(options[:device], options[:os])
-fail_with_message('failed to get simulator udid') unless udid || state
-
-simulator = {
-  name: options[:device],
-  udid: udid,
-  os: options[:os]
-}
-
-ENV['IOS_SIMULATOR_UDID'] = udid
-
-xcode_version = xcode_major_version!
-
 #
 # Print configs
 puts
@@ -305,29 +209,59 @@ puts " * platform: #{options[:platform]}"
 puts " * builder: #{options[:builder]}"
 puts " * clean_build: #{options[:clean_build]}"
 puts " * simulator_device: #{options[:device]}"
-puts " * simulator_UDID: #{udid}"
 puts " * simulator_os: #{options[:os]}"
 
-if options[:clean_build]
-  #
-  # Cleaning the project
-  puts
-  puts "==> Cleaning project: #{options[:project]}"
-  clean_project!(options[:builder], options[:project], options[:configuration], options[:platform], false)
+#
+# Validate inputs
+fail_with_message('No project file found') unless options[:project] && File.exist?(options[:project])
+fail_with_message('No test_project file found') unless options[:test_project] && File.exist?(options[:test_project])
+fail_with_message('configuration not specified') unless options[:configuration]
+fail_with_message('platform not specified') unless options[:platform]
+fail_with_message('builder not specified') unless options[:builder]
+fail_with_message('simulator_device not specified') unless options[:device]
+fail_with_message('simulator_os_version not specified') unless options[:os]
 
-  puts
-  puts "==> Cleaning test project: #{options[:test_project]}"
-  clean_project!(options[:builder], options[:test_project], options[:configuration], options[:platform], true)
+udid, state = simulator_udid_and_state(options[:device], options[:os])
+fail_with_message('failed to get simulator udid') unless udid || state
+
+puts " * simulator_UDID: #{udid}"
+
+simulator = {
+  name: options[:device],
+  udid: udid,
+  os: options[:os]
+}
+
+ENV['IOS_SIMULATOR_UDID'] = udid
+
+xcode_version = xcode_major_version!
+
+builder = Builder.new(options[:project], options[:configuration], options[:platform])
+test_builder = Builder.new(options[:test_project], options[:configuration], options[:platform])
+
+#
+# Main
+
+if options[:clean_build]
+  builder.clean!
+  test_builder.clean!
 end
 
 #
 # Build project
 puts
 puts "==> Building project: #{options[:project]}"
-build_path = build_project!(options[:builder], options[:project], options[:configuration], options[:platform])
-fail_with_message('Failed to locate build path') unless build_path
 
-app_path = export_app(build_path)
+built_projects = builder.build!
+
+app_path = nil
+
+built_projects.each do |project|
+  if project[:api] == MONOTOUCH_API_NAME || project[:api] == XAMARIN_IOS_API_NAME && !project[:is_test]
+    app_path = builder.export_app(project[:output_path])
+  end
+end
+
 fail_with_message('failed to get .app path') unless app_path
 puts "  (i) .app path: #{app_path}"
 
@@ -335,10 +269,18 @@ puts "  (i) .app path: #{app_path}"
 # Build UITest
 puts
 puts "==> Building test project: #{options[:test_project]}"
-test_build_path = build_project!(options[:builder], options[:test_project], options[:configuration], options[:platform])
-fail_with_message('failed to get test build path') unless test_build_path
 
-dll_path = export_dll(test_build_path)
+built_projects = test_builder.build!
+
+dll_path = nil
+
+built_projects.each do |project|
+  if project[:api] == MONOTOUCH_API_NAME || project[:api] == XAMARIN_IOS_API_NAME && project[:is_test]
+    dll_path = builder.export_dll(project[:output_path])
+  end
+end
+
+
 fail_with_message('failed to get .dll path') unless dll_path
 puts "  (i) .dll path: #{dll_path}"
 
