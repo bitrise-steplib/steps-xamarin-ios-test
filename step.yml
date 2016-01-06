@@ -23,13 +23,6 @@ inputs:
         Path to Xamarin Project
       is_required: true
       is_expand: true
-  - xamarin_test_project:
-    opts:
-      title: Path to Xamarin UITest Project
-      description: |
-        Path to Xamarin UITest Project
-      is_required: true
-      is_expand: true
   - xamarin_configuration: Debug
     opts:
       title: Xamarin project configuration
@@ -53,14 +46,6 @@ inputs:
       is_required: true
       is_expand: true
       is_dont_change_value: false
-  - xamarin_builder: xbuild
-    opts:
-      title: Build tool
-      value_options:
-        - xbuild
-        - mdtool
-      is_required: true
-      is_expand: true
   - simulator_device: iPhone 6
     opts:
       title: "Device"

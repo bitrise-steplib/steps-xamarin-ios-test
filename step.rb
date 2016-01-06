@@ -34,7 +34,7 @@ def xcode_major_version!
   begin
     version = out.split("\n")[0].strip.split(' ')[1].strip.split('.')[0].to_i
   rescue
-    fail_with_message('failed to get xcode version') unless xcode_version
+    fail_with_message('failed to get xcode version') unless version
   end
   version
 end
@@ -82,7 +82,7 @@ def shutdown_simulator!(xcode_major_version)
   all_has_shutdown_state = simulators_has_shutdown_state?
   return if all_has_shutdown_state
 
-  shut_down_cmd = 'killall Simulator' if xcode_major_version == 7
+  shut_down_cmd = 'killall Simulator'
   shut_down_cmd = 'killall "iOS Simulator"' if xcode_major_version == 6
   fail_with_message("invalid xcode_major_version (#{xcode_major_version})") unless shut_down_cmd
 
@@ -105,7 +105,7 @@ def shutdown_simulator!(xcode_major_version)
 end
 
 def boot_simulator!(simulator, xcode_major_version)
-  simulator_cmd = '/Applications/Xcode.app/Contents/Developer/Applications/Simulator.app' if xcode_major_version == 7
+  simulator_cmd = '/Applications/Xcode.app/Contents/Developer/Applications/Simulator.app'
   simulator_cmd = '/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Applications/iPhone Simulator.app' if xcode_major_version == 6
   fail_with_message("invalid xcode_major_version (#{xcode_major_version})") unless simulator_cmd
 
@@ -172,24 +172,20 @@ end
 #
 # Input validation
 options = {
-  project: nil,
-  test_project: nil,
-  configuration: nil,
-  platform: nil,
-  builder: nil,
-  clean_build: true,
-  device: nil,
-  os: nil
+    project: nil,
+    configuration: nil,
+    platform: nil,
+    clean_build: true,
+    device: nil,
+    os: nil
 }
 
-parser = OptionParser.new do|opts|
+parser = OptionParser.new do |opts|
   opts.banner = 'Usage: step.rb [options]'
   opts.on('-s', '--project path', 'Project path') { |s| options[:project] = s unless s.to_s == '' }
-  opts.on('-t', '--test project', 'Test project') { |t| options[:test_project] = t unless t.to_s == '' }
   opts.on('-c', '--configuration config', 'Configuration') { |c| options[:configuration] = c unless c.to_s == '' }
   opts.on('-p', '--platform platform', 'Platform') { |p| options[:platform] = p unless p.to_s == '' }
-  opts.on('-b', '--builder builder', 'Builder') { |b| options[:builder] = b unless b.to_s == '' }
-  opts.on('-i', '--clean build', 'Clean build') { |i| options[:clean_build] = false if to_bool(i) == false }
+  opts.on('-i', '--clean build', 'Clean build') { |i| options[:clean_build] = false unless to_bool(i) }
   opts.on('-d', '--device device', 'Device') { |d| options[:device] = d unless d.to_s == '' }
   opts.on('-o', '--os os', 'OS') { |o| options[:os] = o unless o.to_s == '' }
   opts.on('-h', '--help', 'Displays Help') do
@@ -203,10 +199,8 @@ parser.parse!
 puts
 puts '========== Configs =========='
 puts " * project: #{options[:project]}"
-puts " * test_project: #{options[:test_project]}"
 puts " * configuration: #{options[:configuration]}"
 puts " * platform: #{options[:platform]}"
-puts " * builder: #{options[:builder]}"
 puts " * clean_build: #{options[:clean_build]}"
 puts " * simulator_device: #{options[:device]}"
 puts " * simulator_os: #{options[:os]}"
@@ -214,10 +208,8 @@ puts " * simulator_os: #{options[:os]}"
 #
 # Validate inputs
 fail_with_message('No project file found') unless options[:project] && File.exist?(options[:project])
-fail_with_message('No test_project file found') unless options[:test_project] && File.exist?(options[:test_project])
 fail_with_message('configuration not specified') unless options[:configuration]
 fail_with_message('platform not specified') unless options[:platform]
-fail_with_message('builder not specified') unless options[:builder]
 fail_with_message('simulator_device not specified') unless options[:device]
 fail_with_message('simulator_os_version not specified') unless options[:os]
 
@@ -227,74 +219,111 @@ fail_with_message('failed to get simulator udid') unless udid || state
 puts " * simulator_UDID: #{udid}"
 
 simulator = {
-  name: options[:device],
-  udid: udid,
-  os: options[:os]
+    name: options[:device],
+    udid: udid,
+    os: options[:os]
 }
 
 ENV['IOS_SIMULATOR_UDID'] = udid
 
 xcode_version = xcode_major_version!
 
-builder = Builder.new(options[:project], options[:configuration], options[:platform])
-test_builder = Builder.new(options[:test_project], options[:configuration], options[:platform])
-
 #
 # Main
 
-if options[:clean_build]
-  builder.clean!
-  test_builder.clean!
+projects_to_test = []
+
+if (File.extname(options[:project]) == '.sln')
+  projects = SolutionAnalyzer.new(options[:project]).collect_projects(options[:configuration], options[:platform])
+  projects.each do |project|
+    if project[:api] == MONOTOUCH_API_NAME || project[:api] == XAMARIN_IOS_API_NAME && project[:related_test_project]
+      test_project = ProjectAnalyzer.new(project[:related_test_project]).analyze(options[:configuration], options[:platform])
+
+      projects_to_test << {
+          project: project,
+          test_project: test_project
+      }
+    end
+  end
+else
+  project = ProjectAnalyzer.new(options[:project]).analyze(options[:configuration], options[:platform])
+  if project[:related_test_project]
+    test_project = ProjectAnalyzer.new(project[:related_test_project]).analyze(options[:configuration], options[:platform])
+
+    projects_to_test << {
+        project: project,
+        test_project: test_project
+    }
+  end
 end
+
+fail 'No project and related test project found' if projects_to_test.count == 0
+
+projects_to_test.each do |project_to_test|
+  project = project_to_test[:project]
+  test_project = project_to_test[:test_project]
+
+  puts
+  puts " ** project to test: #{project[:path]}"
+  puts " ** related test project: #{test_project[:path]}"
+
+  builder = Builder.new(project[:path], project[:configuration], project[:platform])
+  test_builder = Builder.new(test_project[:path], test_project[:configuration], test_project[:platform])
+
+  if options[:clean_build]
+    builder.clean!
+    test_builder.clean!
+  end
 
 #
 # Build project
-puts
-puts "==> Building project: #{options[:project]}"
+  puts
+  puts "==> Building project: #{project[:path]}"
 
-built_projects = builder.build!
+  built_projects = builder.build!
 
-app_path = nil
+  app_path = nil
 
-built_projects.each do |project|
-  if project[:api] == MONOTOUCH_API_NAME || project[:api] == XAMARIN_IOS_API_NAME && !project[:is_test]
-    app_path = builder.export_app(project[:output_path])
+  built_projects.each do |project|
+    if project[:api] == MONOTOUCH_API_NAME || project[:api] == XAMARIN_IOS_API_NAME && !project[:is_test]
+      app_path = builder.export_app(project[:output_path])
+    end
   end
-end
 
-fail_with_message('failed to get .app path') unless app_path
-puts "  (i) .app path: #{app_path}"
+  fail_with_message('failed to get .app path') unless app_path
+  puts "  (i) .app path: #{app_path}"
 
 #
 # Build UITest
-puts
-puts "==> Building test project: #{options[:test_project]}"
+  puts
+  puts "==> Building test project: #{test_project}"
 
-built_projects = test_builder.build!
+  built_projects = test_builder.build!
 
-dll_path = nil
+  dll_path = nil
 
-built_projects.each do |project|
-  if project[:api] == MONOTOUCH_API_NAME || project[:api] == XAMARIN_IOS_API_NAME && project[:is_test]
-    dll_path = builder.export_dll(project[:output_path])
+  built_projects.each do |project|
+    if project[:is_test]
+      dll_path = test_builder.export_dll(project[:output_path])
+    end
   end
-end
 
 
-fail_with_message('failed to get .dll path') unless dll_path
-puts "  (i) .dll path: #{dll_path}"
+  fail_with_message('failed to get .dll path') unless dll_path
+  puts "  (i) .dll path: #{dll_path}"
 
 #
 # Copy .app to simulator
-puts
-puts '=> copy .app to simulator'
-copy_app_to_simulator!(simulator, app_path, xcode_version)
+  puts
+  puts '=> copy .app to simulator'
+  copy_app_to_simulator!(simulator, app_path, xcode_version)
 
 #
 # Run unit test
-puts
-puts '=> run unit test'
-run_unit_test!(dll_path)
+  puts
+  puts '=> run unit test'
+  run_unit_test!(dll_path)
+end
 
 #
 # Set output envs
