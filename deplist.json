@@ -1,8 +1,0 @@
-{
-	"deps": [
-		{
-			"url": "https://github.com/bitrise-io/xamarin-builder.git",
-			"store_path": "xamarin-builder"
-		}
-	]
-}
