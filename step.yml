@@ -16,7 +16,7 @@ is_skippable: false
 dependencies: []
 run_if: ""
 inputs:
-  - xamarin_project: 
+  - xamarin_project: $BITRISE_PROJECT_PATH
     opts:
       title: Path to Xamarin Project
       description: |
