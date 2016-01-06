@@ -48,8 +48,10 @@ class ProjectAnalyzer
       if s_path
         solution = SolutionAnalyzer.new(s_path).analyze
         solution[:test_projects].each do |test_project_path|
-          referred_project_path = ProjectAnalyzer.new(test_project_path[:path]).referred_project_path
-          related_test_project = test_project_path[:path] if referred_project_path == @path
+          ProjectAnalyzer.new(test_project_path[:path]).referred_project_paths.each do |referred_project_path|
+            relative_referred_project_path = Pathname.new(referred_project_path).relative_path_from(Pathname.new(File.expand_path(File.dirname(s_path)))).cleanpath
+            related_test_project = test_project_path[:path] if Pathname.new(@path).cleanpath == relative_referred_project_path
+          end
         end
       end
     end
@@ -98,9 +100,10 @@ class ProjectAnalyzer
     nil
   end
 
-  def referred_project_path
+  def referred_project_paths
     # <ProjectReference Include="..\CreditCardValidator.Droid\CreditCardValidator.Droid.csproj">
     referred_project_regexp = '<ProjectReference Include="(?<project>.*)">'
+    paths = []
 
     File.open(@path).each do |line|
       match = line.match(referred_project_regexp)
@@ -108,11 +111,11 @@ class ProjectAnalyzer
         referred_project_path = match.captures[0].strip.gsub(/\\/, '/')
         project_dir = File.dirname(@path)
 
-        return File.expand_path(referred_project_path, project_dir)
+        paths << File.expand_path(referred_project_path, project_dir)
       end
     end
 
-    nil
+    paths
   end
 
   def output_path(configuration, platform)
