@@ -230,7 +230,6 @@ xcode_version = xcode_major_version!
 
 #
 # Main
-
 projects_to_test = []
 
 if (File.extname(options[:project]) == '.sln')

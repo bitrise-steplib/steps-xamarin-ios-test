@@ -26,17 +26,22 @@ class Builder
 
     # Collect project information
 
-    projects_to_build = []
+    projects_to_clean = []
     if is_project_solution
-      projects_to_build = SolutionAnalyzer.new(@project_path).collect_projects(@configuration, @platform)
+      projects_to_clean = SolutionAnalyzer.new(@project_path).collect_projects(@configuration, @platform)
     else
-      projects_to_build = ProjectAnalyzer.new(@project_path).collect_projects(@configuration, @platform)
+      projects_to_clean << ProjectAnalyzer.new(@project_path).analyze(@configuration, @platform)
     end
 
     # Clean projects
 
     projects_to_clean.each do |project_to_clean|
       command = generate_clean_command(project_to_clean)
+
+      puts
+      puts "command: #{command}"
+      puts
+
       system(command)
       fail 'Clean failed' unless $?.success?
     end
@@ -59,7 +64,11 @@ class Builder
 
     projects_to_build.each do |project_to_build|
       command = generate_build_command(project_to_build)
+
+      puts
       puts "command: #{command}"
+      puts
+
       system(command)
       fail 'Build failed' unless $?.success?
 
@@ -175,6 +184,7 @@ class Builder
         project_hash[:path],
         '/t:Clean',
         "/p:Configuration=\"#{project_hash[:configuration]}\"",
+        "/p:OutputPath=\"#{project_hash[:output_path]}/\""
     ]
 
     cmd << "/p:Platform=\"#{project_hash[:platform]}\"" unless project_hash[:is_test]

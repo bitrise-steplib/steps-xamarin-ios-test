@@ -7,13 +7,14 @@ XAMARIN_UITEST_API = 'Xamarin.UITest'
 class ProjectAnalyzer
 
   CSPROJ_EXT = '.csproj'
+  SHPROJ_EXT = '.shproj'
 
   def initialize(path)
     fail 'Empty path provided' if path.to_s == ''
     fail "File (#{path}) not exist" unless File.exist? path
 
     ext = File.extname(path)
-    fail "Path (#{path}) is not a csproj path, extension should be: #{CSPROJ_EXT}" if ext != CSPROJ_EXT
+    fail "Path (#{path}) is not a csproj path, extension should be: #{CSPROJ_EXT}" if ext != CSPROJ_EXT &&  ext != SHPROJ_EXT
 
     @path = path
   end
@@ -43,10 +44,13 @@ class ProjectAnalyzer
 
     related_test_project = ''
     if !is_test
-      solution = SolutionAnalyzer.new(solution_path).analyze
-      solution[:test_projects].each do |test_project_path|
-        referred_project_path = ProjectAnalyzer.new(test_project_path[:path]).referred_project_path
-        related_test_project = test_project_path[:path] if referred_project_path == @path
+      s_path = solution_path
+      if s_path
+        solution = SolutionAnalyzer.new(s_path).analyze
+        solution[:test_projects].each do |test_project_path|
+          referred_project_path = ProjectAnalyzer.new(test_project_path[:path]).referred_project_path
+          related_test_project = test_project_path[:path] if referred_project_path == @path
+        end
       end
     end
 
@@ -140,7 +144,21 @@ class ProjectAnalyzer
       next unless related_config_start
 
       match = line.match(output_path_regexp)
-      return match.captures[0].strip.gsub(/\\/, '/') if match && match.captures && match.captures.count == 1
+      if match && match.captures && match.captures.count == 1
+        output_path = match.captures[0].strip
+        output_path = output_path.gsub(/\\/, '/')
+
+        cleaned = false
+        while !cleaned do
+          if output_path[output_path.length-1] == '/'
+            output_path[output_path.length-1] = ''
+          else
+            cleaned = true
+          end
+        end
+
+        return output_path
+      end
     end
 
     nil
