@@ -87,10 +87,7 @@ class ProjectAnalyzer
     end
 
     if solution_id
-      root_dir = File.dirname(@path)
-      root_dir = File.dirname(root_dir)
-
-      solutions = Dir[File.join(root_dir, '/*.sln')]
+      solutions = Dir['**/*.sln']
 
       solutions.each do |solution|
         found_solution_id = SolutionAnalyzer.new(solution).solution_id
