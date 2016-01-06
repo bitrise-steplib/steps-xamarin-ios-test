@@ -29,8 +29,8 @@ class Builder
 
     if is_project_solution
       solution = Analyzer.new(@project_path).analyze_solution
-      solution.projects.each do |project|
-        mapping = project.mapping
+      solution[:projects].each do |project|
+        mapping = project[:mapping]
         config = mapping["#{@configuration}|#{@platform}"]
         fail "No mapping found for config: #{@configuration}|#{@platform}" unless config
 
@@ -38,7 +38,7 @@ class Builder
         fail "No configuration, platform found for config: #{config}" unless configuration || platform
 
         projects << {
-            path: project.path,
+            path: project[:path],
             configuration: configuration,
             platform: platform
         }
@@ -84,8 +84,8 @@ class Builder
 
     if is_project_solution
       solution = Analyzer.new(@project_path).analyze_solution
-      solution.projects.each do |project|
-        mapping = project.mapping
+      solution[:projects].each do |project|
+        mapping = project[:mapping]
         config = mapping["#{@configuration}|#{@platform}"]
         fail "No mapping found for config: #{@configuration}|#{@platform}" unless config
 
@@ -93,7 +93,7 @@ class Builder
         fail "No configuration, platform found for config: #{config}" unless configuration || platform
 
         projects << {
-            path: project.path,
+            path: project[:path],
             configuration: configuration,
             platform: platform
         }
@@ -130,8 +130,6 @@ class Builder
       project_to_build[:is_test] = is_test
       project_to_build[:build_ipa] = build_ipa
       project_to_build[:sign_apk] = sign_apk
-
-      puts "project_to_build: #{project_to_build}"
 
       projects_to_build << project_to_build
     end
@@ -223,10 +221,10 @@ class Builder
         XBUILD_NAME,
         project_hash[:path],
         "/p:Configuration=\"#{project_hash[:configuration]}\"",
+        "/p:Platform=\"#{project_hash[:platform]}\"",
         "/p:OutputPath=\"#{project_hash[:output_path]}/\""
     ]
 
-    cmd << "/p:Platform=\"#{project_hash[:platform]}\"" unless project_hash[:is_test]
     cmd << '/t:Build' if project_hash[:api] == XAMARIN_IOS_API_NAME
     cmd << '/p:BuildIpa=true' if project_hash[:api] == XAMARIN_IOS_API_NAME && project_hash[:build_ipa]
 
