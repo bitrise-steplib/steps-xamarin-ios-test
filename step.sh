@@ -9,5 +9,6 @@ ruby "${THIS_SCRIPTDIR}/step.rb" \
 	-c "${xamarin_configuration}" \
 	-p "${xamarin_platform}" \
 	-i "${is_clean_build}" \
+	-t "${test_to_run}" \
 	-d "${simulator_device}" \
 	-o "${simulator_os_version}"

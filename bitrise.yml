@@ -8,16 +8,25 @@ app:
   - BITRISE_XAMARIN_PLATFORM: $BITRISE_XAMARIN_PLATFORM
   - SIMULATOR_DEVICE: $SIMULATOR_DEVICE
   - SIMULATOR_OS_VERSION: $SIMULATOR_OS_VERSION
+  - TEST_TO_RUN: $TEST_TO_RUN
+  - $BITRISE_SOURCE_DIR: $$BITRISE_SOURCE_DIR
 
 workflows:
   test:
     steps:
+    - change-workdir:
+        title: Change workdir
+        run_if: true
+        inputs:
+        - path: $BITRISE_SOURCE_DIR
     - path::./:
+        title: Step test
         inputs:
         - xamarin_project: $XAMARIN_PROJECT
         - xamarin_configuration: $BITRISE_XAMARIN_CONFIGURATION
         - xamarin_platform: $BITRISE_XAMARIN_PLATFORM
-        - is_clean_build: no
+        - is_clean_build: yes
+        - test_to_run: $TEST_TO_RUN
         - simulator_device: $SIMULATOR_DEVICE
         - simulator_os_version: $SIMULATOR_OS_VERSION
     - script:

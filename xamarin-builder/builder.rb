@@ -3,12 +3,18 @@ require 'fileutils'
 
 require_relative './analyzer'
 
-MDTOOL_PATH = "\"/Applications/Xamarin Studio.app/Contents/MacOS/mdtool\""
+# -----------------------
+# --- Constants
+# -----------------------
 
+MDTOOL_PATH = "\"/Applications/Xamarin Studio.app/Contents/MacOS/mdtool\""
 XBUILD_NAME = 'xbuild'
 MDTOOL_NAME = 'mdtool'
 
-# define class Builder
+# -----------------------
+# --- Builder
+# -----------------------
+
 class Builder
   def initialize(project_path, configuration, platform)
     fail 'Empty path provided' if project_path.to_s == ''
