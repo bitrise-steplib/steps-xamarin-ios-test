@@ -161,7 +161,7 @@ if File.extname(options[:project]) == '.sln'
 
   projects.each do |project|
 
-    next if project[:api] != MONOTOUCH_API_NAME || project[:api] != XAMARIN_IOS_API_NAME
+    next if project[:api] != MONOTOUCH_API_NAME && project[:api] != XAMARIN_IOS_API_NAME
 
     test_projects.each do |test_project|
       referred_project_ids = ProjectAnalyzer.new(test_project[:path]).parse_referred_project_ids
@@ -198,8 +198,6 @@ else
 end
 
 fail 'No project and related test project found' if projects_to_test.count == 0
-
-puts "projects_to_test: #{projects_to_test}"
 
 projects_to_test.each do |project_to_test|
   project = project_to_test[:project]
