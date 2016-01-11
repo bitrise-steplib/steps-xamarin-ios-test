@@ -1,6 +1,7 @@
 require 'optparse'
 require 'pathname'
 require 'timeout'
+require 'nokogiri'
 
 require_relative 'xamarin-builder/builder'
 
@@ -8,7 +9,7 @@ require_relative 'xamarin-builder/builder'
 # --- Constants
 # -----------------------
 
-@mdtool = "\"/Applications/Xamarin Studio.app/Contents/MacOS/mdtool\""
+@mdtool = 'Applications/Xamarin Studio.app/Contents/MacOS/mdtool'
 @mono = '/Library/Frameworks/Mono.framework/Versions/Current/bin/mono'
 @nuget = '/Library/Frameworks/Mono.framework/Versions/Current/bin/nuget'
 
@@ -40,7 +41,7 @@ def simulator_udid_and_state(simulator_device, os_version)
   os_found = false
   os_regex = "-- #{os_version} --"
   os_separator_regex = '-- iOS \d.\d --'
-  device_regex = "#{simulator_device}" + '\s*\(([\w|-]*)\)\s*\(([\w]*)\)'
+  device_regex = simulator_device.to_s + '\s*\(([\w|-]*)\)\s*\(([\w]*)\)'
 
   out = `xcrun simctl list | grep -i --invert-match 'unavailable'`
   out.each_line do |line|
@@ -61,36 +62,6 @@ def simulator_udid_and_state(simulator_device, os_version)
   nil
 end
 
-def run_unit_test!(dll_path, test_to_run)
-  nunit_path = ENV['NUNIT_PATH']
-  fail_with_message('No NUNIT_PATH environment specified') unless nunit_path
-
-  nunit_console_path = File.join(nunit_path, 'nunit3-console.exe')
-
-  params = []
-  params << @mono
-  params << nunit_console_path
-  params << "--test=\"#{test_to_run}\"" unless test_to_run.to_s == ''
-  params << dll_path
-
-  command = params.join(' ')
-  puts "command: #{command}"
-
-  system(command)
-
-  unless $?.success?
-    file = File.open(@result_log_path)
-    contents = file.read
-    file.close
-
-    puts
-    puts "result: #{contents}"
-    puts
-
-    fail_with_message("#{command} -- failed")
-  end
-end
-
 # -----------------------
 # --- Main
 # -----------------------
@@ -98,13 +69,12 @@ end
 #
 # Parse options
 options = {
-    project: nil,
-    configuration: nil,
-    platform: nil,
-    clean_build: true,
-    test_to_run: nil,
-    device: nil,
-    os: nil
+  project: nil,
+  configuration: nil,
+  platform: nil,
+  test_to_run: nil,
+  device: nil,
+  os: nil
 }
 
 parser = OptionParser.new do |opts|
@@ -112,7 +82,6 @@ parser = OptionParser.new do |opts|
   opts.on('-s', '--project path', 'Project path') { |s| options[:project] = s unless s.to_s == '' }
   opts.on('-c', '--configuration config', 'Configuration') { |c| options[:configuration] = c unless c.to_s == '' }
   opts.on('-p', '--platform platform', 'Platform') { |p| options[:platform] = p unless p.to_s == '' }
-  opts.on('-i', '--clean build', 'Clean build') { |i| options[:clean_build] = false unless to_bool(i) }
   opts.on('-t', '--test test', 'Test to run') { |t| options[:test_to_run] = t unless t.to_s == '' }
   opts.on('-d', '--device device', 'Device') { |d| options[:device] = d unless d.to_s == '' }
   opts.on('-o', '--os os', 'OS') { |o| options[:os] = o unless o.to_s == '' }
@@ -129,7 +98,6 @@ puts '========== Configs =========='
 puts " * project: #{options[:project]}"
 puts " * configuration: #{options[:configuration]}"
 puts " * platform: #{options[:platform]}"
-puts " * clean_build: #{options[:clean_build]}"
 puts " * test_to_run: #{options[:test_to_run]}"
 puts " * simulator_device: #{options[:device]}"
 puts " * simulator_os: #{options[:os]}"
@@ -147,126 +115,87 @@ fail_with_message('failed to get simulator udid') unless udid || state
 
 puts " * simulator_UDID: #{udid}"
 
-ENV['IOS_SIMULATOR_UDID'] = udid
-
 #
 # Main
-projects_to_test = []
+nunit_path = ENV['NUNIT_PATH']
+fail_with_message('No NUNIT_PATH environment specified') unless nunit_path
+nunit_console_path = File.join(nunit_path, 'nunit3-console.exe')
+fail_with_message('nunit3-console.exe not found') unless File.exist?(nunit_console_path)
 
-if File.extname(options[:project]) == '.sln'
-  analyzer = SolutionAnalyzer.new(options[:project])
 
-  projects = analyzer.collect_projects(options[:configuration], options[:platform])
-  test_projects = analyzer.collect_test_projects(options[:configuration], options[:platform])
+builder = Builder.new(options[:project], options[:configuration], options[:platform], 'ios')
+begin
+  builder.build_test
+rescue => ex
+  error_with_message(ex.inspect.to_s)
+  error_with_message('--- Stack trace: ---')
+  error_with_message(ex.backtrace.to_s)
+  exit(1)
+end
 
-  projects.each do |project|
+output = builder.generated_files
+fail_with_message 'No output generated' if output.nil? || output.empty?
 
-    next if project[:api] != MONOTOUCH_API_NAME && project[:api] != XAMARIN_IOS_API_NAME
+any_uitest_built = false
 
-    test_projects.each do |test_project|
-      referred_project_ids = ProjectAnalyzer.new(test_project[:path]).parse_referred_project_ids
-      referred_project_ids.each do |project_id|
-        if project_id == project[:id]
-          projects_to_test << {
-              project: project,
-              test_project: test_project,
-          }
+output.each do |_, project_output|
+  app = project_output[:app]
+  uitests = project_output[:uitests]
+
+  next if app.nil? || uitests.nil?
+
+  ENV['APP_BUNDLE_PATH'] = app
+
+  uitests.each do |dll_path|
+    any_uitest_built = true
+
+    puts
+    puts "\e[34mRunning UITest agains #{app}\e[0m"
+
+    params = [
+      @mono,
+      nunit_console_path,
+      dll_path
+    ]
+    params << "--test=\"#{options[:test_to_run]}\"" unless options[:test_to_run].nil?
+
+    command = params.join(' ')
+
+    puts command
+    system(command)
+
+    unless $?.success?
+      file = File.open(@result_log_path)
+      contents = file.read
+      file.close
+
+      doc = Nokogiri::XML(contents)
+      failed_tests = doc.xpath('//test-case[@result="Failed"]')
+
+      unless failed_tests.empty?
+        puts "\e[34mParsed TestResults.xml\e[0m"
+        failed_tests.each do |failed_test|
+          puts ""
+          puts "\e[31m#{failed_test['name']}\e[0m"
+          puts "\e[31m#{failed_test.xpath('./failure/message').text}\e[0m"
+          puts "Stack trace:"
+          puts failed_test.xpath('./failure/stack-trace').text
+          puts
         end
+        fail_with_message("UITest execution failed")
       end
     end
   end
-else
-  analyzer = ProjectAnalyzer.new(options[:project])
-  project = analyzer.analyze(options[:configuration], options[:platform])
 
-  solution_path = analyzer.parse_solution_path
-  analyzer = SolutionAnalyzer.new(solution_path)
+  # Set output envs
+  puts "\e[32mUITests finished with success\e[0m"
+  system('envman add --key BITRISE_XAMARIN_TEST_RESULT --value succeeded')
 
-  test_projects = analyzer.collect_test_projects(options[:configuration], options[:platform])
-
-  test_projects.each do |test_project|
-    referred_project_ids = ProjectAnalyzer.new(test_project[:path]).parse_referred_project_ids
-    referred_project_ids.each do |project_id|
-      if project_id == project[:id]
-        projects_to_test << {
-            project: project,
-            test_project: test_project,
-        }
-      end
-    end
-  end
+  puts "Logs are available at: #{@result_log_path}"
+  system("envman add --key BITRISE_XAMARIN_TEST_FULL_RESULTS_TEXT --value #{@result_log_path}") if @result_log_path
 end
 
-fail 'No project and related test project found' if projects_to_test.count == 0
-
-projects_to_test.each do |project_to_test|
-  project = project_to_test[:project]
-  test_project = project_to_test[:test_project]
-
-  puts
-  puts " ** project to test: #{project[:path]}"
-  puts " ** related test project: #{test_project[:path]}"
-
-  builder = Builder.new(project[:path], project[:configuration], project[:platform])
-  test_builder = Builder.new(test_project[:path], test_project[:configuration], test_project[:platform])
-
-  #
-  # Clean projects
-  if options[:clean_build]
-    builder.clean!
-    test_builder.clean!
-  end
-
-  #
-  # Build project
-  puts
-  puts "==> Building project: #{project}"
-
-  built_projects = builder.build!
-
-  app_path = nil
-
-  built_projects.each do |built_project|
-    if built_project[:api] == MONOTOUCH_API_NAME || built_project[:api] == XAMARIN_IOS_API_NAME && !built_project[:is_test]
-      app_path = builder.export_app(built_project[:output_path])
-    end
-  end
-
-  fail_with_message('failed to get .app path') unless app_path
-  puts "  (i) .app path: #{app_path}"
-  ENV['APP_BUNDLE_PATH'] = app_path
-
-  #
-  # Build UITest
-  puts
-  puts "==> Building test project: #{test_project}"
-
-  built_projects = test_builder.build!
-
-  dll_path = nil
-
-  built_projects.each do |built_project|
-    if built_project[:is_test]
-      dll_path = test_builder.export_dll(built_project[:output_path])
-    end
-  end
-
-  fail_with_message('failed to get .dll path') unless dll_path
-  puts "  (i) .dll path: #{dll_path}"
-
-  #
-  # Run unit test
-  puts
-  puts '=> Run unit test'
-  run_unit_test!(dll_path, options[:test_to_run])
+unless any_uitest_built
+  puts "generated_files: #{output}"
+  fail_with_message 'No xcarchive or test dll found in outputs'
 end
-
-#
-# Set output envs
-puts
-puts '(i) The result is: succeeded'
-system('envman add --key BITRISE_XAMARIN_TEST_RESULT --value succeeded')
-
-puts
-puts "(i) The test log is available at: #{@result_log_path}"
-system("envman add --key BITRISE_XAMARIN_TEST_FULL_RESULTS_TEXT --value #{@result_log_path}") if @result_log_path

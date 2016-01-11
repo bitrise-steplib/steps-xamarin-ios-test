@@ -1,531 +1,457 @@
+require 'time'
+require 'pathname'
+
 # -----------------------
 # --- Constants
 # -----------------------
 
-MONO_ANDROID_API_NAME = 'Mono.Android'
-MONOTOUCH_API_NAME = 'monotouch'
-XAMARIN_IOS_API_NAME = 'Xamarin.iOS'
-XAMARIN_UITEST_API = 'Xamarin.UITest'
+MDTOOL_PATH = "\"/Applications/Xamarin Studio.app/Contents/MacOS/mdtool\""
 
 CSPROJ_EXT = '.csproj'
 SHPROJ_EXT = '.shproj'
 SLN_EXT = '.sln'
 
-# -----------------------
-# --- ProjectAnalyzer
-# -----------------------
+SOLUTION = 'solution'
+PROJECT = 'project'
 
-class ProjectAnalyzer
+REGEX_SOLUTION_PROJECTS = /Project\(\"(?<solution_id>[^\"]*)\"\) = \"(?<project_name>[^\"]*)\", \"(?<project_path>[^\"]*)\", \"(?<project_id>[^\"]*)\"/i
+REGEX_SOLUTION_GLOBAL_SOLUTION_CONFIG_START = /GlobalSection\(SolutionConfigurationPlatforms\) = preSolution/i
+REGEX_SOLUTION_GLOBAL_SOLUTION_CONFIG = /^\s*(?<config>[^|]*)\|(?<platform>[^|]*) =/i
+REGEX_SOLUTION_GLOBAL_PROJECT_CONFIG_START = /GlobalSection\(ProjectConfigurationPlatforms\) = postSolution/i
+REGEX_SOLUTION_GLOBAL_PROJECT_CONFIG = /(?<project_id>{[^}]*}).(?<config>(\w|\s)*)\|(?<platform>(\w|\s)*)\.Build.* = (?<mapped_config>(\w|\s)*)\|(?<mapped_platform>(\w|\s)*)/i
+REGEX_SOLUTION_GLOBAL_CONFIG_END = /EndGlobalSection/i
 
-  def initialize(path)
-    fail 'Empty path provided' if path.to_s == ''
-    fail "File (#{path}) not exist" unless File.exist? path
+REGEX_PROJECT_GUID = /<ProjectGuid>(?<project_id>.*)<\/ProjectGuid>/i
+REGEX_PROJECT_OUTPUT_TYPE = /<OutputType>(?<output_type>.*)<\/OutputType>/i
+REGEX_PROJECT_ASSEMBLY_NAME = /<AssemblyName>(?<assembly_name>.*)<\/AssemblyName>/i
+REGEX_PROJECT_MTOUCH_ARCH = /<MtouchArch>(?<arch>.*)<\/MtouchArch>/
+REGEX_PROJECT_PROPERTY_GROUP_WITH_CONDITION = /<PropertyGroup Condition=\" '\$\(Configuration\)\|\$\(Platform\)' == '(?<config>(\w|\s)*)\|(?<platform>(\w|\s)*)' \">/i
+REGEX_PROJECT_PROPERTY_GROUP_END = /<\/PropertyGroup>/i
+REGEX_PROJECT_OUTPUT_PATH = /<OutputPath>(?<output_path>.*)<\/OutputPath>/i
+REGEX_PROJECT_IPA_PACKAGE = /<IpaPackageName>/i
+REGEX_PROJECT_BUILD_IPA = /<BuildIpa>True<\/BuildIpa>/i
+REGEX_PROJECT_ANDROID_APPLICATION= /<AndroidApplication>True<\/AndroidApplication>/i
+REGEX_PROJECT_SIGN_ANDROID = /<AndroidKeyStore>True<\/AndroidKeyStore>/i
+REGEX_PROJECT_REFERENCE_XAMARIN_IOS = /Include="Xamarin.iOS"/i
+REGEX_PROJECT_REFERENCE_XAMARIN_ANDROID = /Include="Mono.Android"/i
+REGEX_PROJECT_REFERENCE_XAMARIN_UITEST = /Include="Xamarin.UITest"/i
 
-    ext = File.extname(path)
-    fail "Path (#{path}) is not a csproj path, extension should be: #{CSPROJ_EXT}" if ext != CSPROJ_EXT && ext != SHPROJ_EXT
+REGEX_PROJECT_PROJECT_REFERENCE_START = /<ProjectReference Include="(?<project_path>.*)">/i
+REGEX_PROJECT_PROJECT_REFERENCE_END = /<\/ProjectReference>/i
+REGEX_PROJECT_REFERRED_PROJECT_ID = /<Project>(?<id>.*)<\/Project>/i
 
+REGEX_ARCHIVE_DATE_TIME = /\s(.*[AM]|[PM]).*\./i
+
+class Analyzer
+  def analyze(path)
     @path = path
-  end
 
-  def analyze(configuration, platform)
-    id = parse_project_id
-
-    output_path = parse_output_path(configuration, platform)
-
-    api = parse_xamarin_api
-
-    is_test = (api == XAMARIN_UITEST_API)
-
-    build_ipa = false
-    build_ipa = parse_allowed_to_build_ipa?(configuration, platform) if api == MONOTOUCH_API_NAME || api == XAMARIN_IOS_API_NAME
-
-    sign_apk = false
-    sign_apk = parse_allowed_to_sign_android?(configuration, platform) if api == MONO_ANDROID_API_NAME
-
-    use_unsafe_blocks = parse_use_unsafe_blocks?
-
-    {
-        id: id,
-        path: @path,
-        configuration: configuration,
-        platform: platform,
-        api: api,
-        output_path: output_path,
-        is_test: is_test,
-        build_ipa: build_ipa,
-        sign_apk: sign_apk,
-        use_unsafe_blocks: use_unsafe_blocks
-    }
-  end
-
-  def parse_configs
-    configs = []
-
-    # <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|iPhoneSimulator' ">
-    config_regexp = '<PropertyGroup Condition=" \'\$\(Configuration\)\|\$\(Platform\)\' == \'(?<config>.*)\' ">'
-
-    File.open(@path).each do |line|
-      match = line.match(config_regexp)
-
-      next if match == nil || match.captures == nil || match.captures.count != 1
-
-      configs << match.captures[0]
+    case type
+      when SOLUTION
+        analyze_solution(@path)
+      when PROJECT
     end
 
-    configs
+    @solution[:projects].each do |project|
+      analyze_project(project)
+    end
   end
 
-  def parse_solution_path
-    # <ProjectTypeGuids>{FEACFBD2-3405-455C-9665-78FE426C6842};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
-    project_ids_regexp = '<ProjectTypeGuids>(?<ids>.*)<\/ProjectTypeGuids>'
-
-    solution_id = ''
-
-    File.open(@path).each do |line|
-      match = line.match(project_ids_regexp)
-
-      next if match == nil || match.captures == nil || match.captures.count != 1
-      ids = match.captures[0].split(';')
-
-      prepared_ids = []
-      ids.each do |id|
-        id[0] = ''
-        id[id.length-1] = ''
-
-        prepared_ids << id
-      end
-
-      solution_id = prepared_ids.last
-    end
-
-    if solution_id
-      solutions = Dir['**/*.sln']
-
-      solutions.each do |solution|
-        found_solution_id = SolutionAnalyzer.new(solution).parse_solution_id
-
-        return solution if found_solution_id == solution_id
-      end
-    end
-
-    nil
+  def inspect
+    puts "-- analyze: #{@path}"
+    puts
+    puts @solution
   end
 
-  def parse_project_id
-    # <ProjectGuid>{90F3C584-FD69-4926-9903-6B9771847782}</ProjectGuid>
-    project_id_regexp = '<ProjectGuid>{(?<id>.*)<\/ProjectGuid>'
+  def build_commands(config, platform, project_type_filter)
+    configuration = "#{config}|#{platform}"
+    build_commands = []
 
-    File.open(@path).each do |line|
-      match = line.match(project_id_regexp)
+    @solution[:projects].each do |project|
+      next unless project[:mappings]
+      project_configuration = project[:mappings][configuration]
 
-      return match.captures[0] if match && match.captures && match.captures.count == 1
-    end
+      case project[:api]
+        when 'ios'
+          next unless project_type_filter.include? 'ios'
+          next unless project[:output_type].eql?('exe')
+          unless project_configuration
+            puts "Skipping: No configuration mapping found for (#{configuration}) in project #{project[:name]}" 
+            next
+          end
 
-    nil
-  end
+          archs = project[:configs][project_configuration][:mtouch_arch]
+          generate_archive = archs && archs.select { |x| x.downcase.start_with? 'arm' }.count == archs.count
 
-  def parse_referred_project_ids
-    ids = []
+          build_commands << [
+              MDTOOL_PATH,
+              generate_archive ? 'archive' : 'build',
+              "\"-c:#{configuration}\"",
+              @solution[:path],
+              "-p:#{project[:name]}"
+          ].join(' ')
+        when 'android'
+          next unless project_type_filter.include? 'android'
+          next unless project[:android_application]
+          unless project_configuration
+            puts "Skipping: No configuration mapping found for (#{configuration}) in project #{project[:name]}"
+            next
+          end
+          sign_android = project[:configs][project_configuration][:sign_android]
 
-    # <ProjectReference Include="..\CreditCardValidator.Droid\CreditCardValidator.Droid.csproj">
-    project_reference_start_regexp = '<ProjectReference Include="(?<project>.*)">'
-    project_reference_end_regexp = '<\/ProjectReference>'
-    project_reference_start = false
+          build_commands << [
+              MDTOOL_PATH,
+              'build',
+              "\"-c:#{configuration}\"",
+              @solution[:path],
+              "-p:#{project[:name]}"
+          ].join(' ')
 
-    # <Project>{90F3C584-FD69-4926-9903-6B9771847782}</Project>
-    project_regexp = '<Project>{(?<id>.*)<\/Project>'
-
-    File.open(@path).each do |line|
-      match = line.match(project_reference_start_regexp)
-      if match && match.captures && match.captures.count == 1
-        project_reference_start = true
-        next
-      end
-
-      match = line.match(project_reference_end_regexp)
-      if match
-        project_reference_start = false
-        next
-      end
-
-      if project_reference_start
-        match = line.match(project_regexp)
-        if match && match.captures && match.captures.count == 1
-          id = match.captures[0]
-          ids << id
+          build_commands << [
+            'xbuild',
+            sign_android ? '/t:SignAndroidPackage' : '/t:PackageForAndroid',
+            "/p:Configuration=#{project_configuration.split('|').first}",
+            "/p:Platform=#{project_configuration.split('|').last}",
+            project[:path]
+          ].join(' ')
+        else
           next
-        end
       end
     end
 
-    ids
+    build_commands
   end
 
-  def parse_output_path(configuration, platform)
-    # <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|iPhone' ">
-    config_regexp = '<PropertyGroup Condition=" \'\$\(Configuration\)\|\$\(Platform\)\' == \'(?<config>.*)\' ">'
+  def test_commands(config, platform)
+    configuration = "#{config}|#{platform}"
+    build_command = nil
 
-    # <OutputPath>bin\Debug</OutputPath>
-    output_path_regexp = '<OutputPath>(?<path>.*)<\/OutputPath>'
+    @solution[:projects].each do |project|
+      next unless project[:mappings]
+      project_configuration = project[:mappings][configuration]
 
-    related_config_start = false
-
-    config = configuration + '|' + platform
-
-    File.open(@path).each do |line|
-      match = line.match(config_regexp)
-      if match && match.captures && match.captures.count == 1
-        found_config = match.captures[0]
-
-        related_config_start = (found_config == config)
-      end
-
-      next unless related_config_start
-
-      match = line.match(output_path_regexp)
-      if match && match.captures && match.captures.count == 1
-        output_path = match.captures[0].strip
-        output_path = output_path.gsub(/\\/, '/')
-
-        dirty = true
-        while dirty do
-          output_path[output_path.length-1] = '' if output_path[output_path.length-1] == '/'
-          dirty = false if output_path[output_path.length-1] != '/'
-        end
-
-        return output_path
-      end
-    end
-
-    nil
-  end
-
-  def parse_use_unsafe_blocks?
-    # <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    if File.file?(@path)
-      lines = File.readlines(@path)
-
-      return true if lines.grep(/<AllowUnsafeBlocks>true<\/AllowUnsafeBlocks>/).size > 0
-    end
-
-    false
-  end
-
-  def parse_allowed_to_build_ipa?(configuration, platform)
-    # <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|iPhone' ">
-    config_regexp = '<PropertyGroup Condition=" \'\$\(Configuration\)\|\$\(Platform\)\' == \'(?<config>.*)\' ">'
-
-    related_config_start = false
-
-    config = configuration + '|' + platform
-
-    File.open(@path).each do |line|
-      match = line.match(config_regexp)
-      if match && match.captures && match.captures.count == 1
-        found_config = match.captures[0]
-
-        related_config_start = (found_config == config)
-      end
-
-      next unless related_config_start
-
-      downcase_line = line.downcase
-      return true if downcase_line.include? '<buildipa>true</buildipa>'
-      return true if downcase_line.include? '<ipapackagename>'
-    end
-
-    false
-  end
-
-  def parse_allowed_to_sign_android?(configuration, platform)
-    # <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    config_regexp = '<PropertyGroup Condition=" \'\$\(Configuration\)\|\$\(Platform\)\' == \'(?<config>.*)\' ">'
-    config = configuration + '|' + platform
-    related_config_start = false
-
-    File.open(@path).each do |line|
-      match = line.match(config_regexp)
-      if match && match.captures && match.captures.count == 1
-        found_config = match.captures[0]
-
-        related_config_start = true if config == found_config
-      end
-
-      next unless related_config_start
-
-      return true if line.downcase.include? '<androidkeystore>true</androidkeystore>'
-    end
-
-    false
-  end
-
-  def parse_xamarin_api
-    if File.file?(@path)
-      lines = File.readlines(@path)
-
-      return MONO_ANDROID_API_NAME if lines.grep(/Include="Mono.Android"/).size > 0
-      return MONOTOUCH_API_NAME if lines.grep(/Include="monotouch"/).size > 0
-      return XAMARIN_IOS_API_NAME if lines.grep(/Include="Xamarin.iOS"/).size > 0
-      return XAMARIN_UITEST_API if lines.grep(/Include="Xamarin.UITest"/).size > 0
-    end
-
-    nil
-  end
-
-end
-
-# -----------------------
-# --- SolutionAnalyzer
-# -----------------------
-
-class SolutionAnalyzer
-
-  def initialize(path)
-    fail 'Empty path provided' if path.to_s == ''
-    fail "File (#{path}) not exist" unless File.exist? path
-
-    ext = File.extname(path)
-    fail "Path (#{path}) is not a solution path, extension should be: #{SLN_EXT}" if ext != SLN_EXT
-
-    @path = path
-  end
-
-  def analyze
-    projects = parse_projects
-    solution_configs = parse_solution_configs
-    project_configs = parse_project_configs
-
-    solution_id = ''
-    ret_projects = []
-    ret_test_projects = []
-
-    projects.each do |project|
-      project_config = project_configs[project[:id]]
-
-      next unless project_config
-
-      solution_id = project[:solution_id]
-
-      ext = File.extname(project[:path])
-      if ext != CSPROJ_EXT && ext != SHPROJ_EXT
-        puts
-        puts "Project file (#{project[:path]}) with unknown extension, skip parsing..."
+      next unless project[:api] == 'uitest'
+      unless project_configuration
+        puts "Skipping: No configuration mapping found for (#{configuration}) in project #{project[:name]}"
         next
       end
 
-      api = ProjectAnalyzer.new(project[:path]).parse_xamarin_api
-
-      next unless api
-
-      ret_project = {
-          id: project[:id],
-          path: project[:path],
-          solution_id: project[:solution_id],
-          api: api,
-          mapping: project_config
-      }
-
-      # FIX
-      # any cpu platform in solution contains space sometimes,
-      # that prevents to select proper configuration-platform in project
-      mapping = fixed_mapping(ret_project)
-      ret_project[:mapping] = mapping
-
-      ret_test_projects << ret_project if api == XAMARIN_UITEST_API
-      ret_projects << ret_project unless api == XAMARIN_UITEST_API
+      build_command = [
+          MDTOOL_PATH,
+          'build',
+          "\"-c:#{configuration}\"",
+          @solution[:path],
+      ].join(' ')
     end
 
-    {
-        id: solution_id,
-        path: @path,
-        configs: solution_configs,
-        projects: ret_projects,
-        test_projects: ret_test_projects
-    }
+    build_command
   end
 
-  def parse_solution_id
-    # Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CreditCardValidator", "CreditCardValidator\CreditCardValidator.csproj", "{99A825A6-6F99-4B94-9F65-E908A6347F1E}"
-    p_regexp = 'Project\("{(?<solution_id>.*)}"\) = "(?<project_name>.*)", "(?<project_path>.*)", "{(?<project_id>.*)}"'
+  def collect_generated_files(config, platform, project_type_filter)
+    outputs_hash = {}
 
-    File.open(@path).each do |line|
-      match = line.match(p_regexp)
+    configuration = "#{config}|#{platform}"
 
-      return match.captures[0] if match && match.captures && match.captures.count == 4
+    @solution[:projects].each do |project|
+      next unless project[:mappings]
+      project_configuration = project[:mappings][configuration]
+
+      case project[:api]
+        when 'ios'
+          next unless project_type_filter.include? 'ios'
+          next unless project[:output_type].eql?('exe')
+          next unless project_configuration
+
+          archs = project[:configs][project_configuration][:mtouch_arch]
+          generate_archive = archs && archs.select { |x| x.downcase.start_with? 'arm' }.count == archs.count
+
+          project_path = project[:path]
+          project_dir = File.dirname(project_path)
+          rel_output_dir = project[:configs][project_configuration][:output_path]
+          full_output_dir = File.join(project_dir, rel_output_dir)
+
+          outputs_hash[project[:id]] = {}
+          if generate_archive
+            full_output_path = latest_archive_path(project[:name])
+
+            next unless full_output_path
+
+            outputs_hash[project[:id]][:xcarchive] = full_output_path
+          else
+            full_output_path = export_artifact(project[:assembly_name], full_output_dir, '.app')
+
+            next unless full_output_path
+
+            outputs_hash[project[:id]][:app] = full_output_path
+
+            # Search for test dll
+            next unless project[:uitest_projects]
+
+            project[:uitest_projects].each do |test_project_id|
+              test_project = project_with_id(test_project_id)
+              test_project_configuration = test_project[:mappings][configuration]
+
+              next unless test_project_configuration
+
+              test_project_path = test_project[:path]
+              test_project_dir = File.dirname(test_project_path)
+              test_rel_output_dir = test_project[:configs][test_project_configuration][:output_path]
+              test_full_output_dir = File.join(test_project_dir, test_rel_output_dir)
+
+              test_full_output_path = export_artifact(test_project[:assembly_name], test_full_output_dir, '.dll')
+
+              (outputs_hash[project[:id]][:uitests] ||= []) << test_full_output_path
+            end
+          end
+        when 'android'
+          next unless project_type_filter.include? 'android'
+          next unless project[:android_application]
+          next unless project_configuration
+
+          project_path = project[:path]
+          project_dir = File.dirname(project_path)
+          rel_output_dir = project[:configs][project_configuration][:output_path]
+          full_output_dir = File.join(project_dir, rel_output_dir)
+
+          full_output_path = export_artifact('*', full_output_dir, '.apk')
+
+          next unless full_output_path
+
+          outputs_hash[project[:id]] = {}
+          outputs_hash[project[:id]][:apk] = full_output_path
+
+          # Search for test dll
+          next unless project[:uitest_projects]
+
+          project[:uitest_projects].each do |test_project_id|
+            test_project = project_with_id(test_project_id)
+            test_project_configuration = test_project[:mappings][configuration]
+
+            next unless test_project_configuration
+
+            test_project_path = test_project[:path]
+            test_project_dir = File.dirname(test_project_path)
+            test_rel_output_dir = test_project[:configs][test_project_configuration][:output_path]
+            test_full_output_dir = File.join(test_project_dir, test_rel_output_dir)
+
+            test_full_output_path = export_artifact(test_project[:assembly_name], test_full_output_dir, '.dll')
+
+            (outputs_hash[project[:id]][:uitests] ||= []) << test_full_output_path
+          end
+        else
+          next
+      end
     end
-  end
 
-  def collect_projects(configuration, platform)
-    projects_to_build = []
-
-    solution = SolutionAnalyzer.new(@path).analyze
-    solution[:projects].each do |project|
-      mapping = project[:mapping]
-      config = mapping["#{configuration}|#{platform}"]
-      fail "No mapping found for config: #{configuration}|#{platform}" unless config
-
-      mapped_configuration, mapped_platform = config.split('|')
-      fail "No configuration, platform found for config: #{config}" unless configuration || platform
-
-      parsed_project = ProjectAnalyzer.new(project[:path]).analyze(mapped_configuration, mapped_platform)
-
-      projects_to_build << parsed_project
-    end
-
-    projects_to_build
-  end
-
-  def collect_test_projects(configuration, platform)
-    projects_to_build = []
-
-    solution = SolutionAnalyzer.new(@path).analyze
-    solution[:test_projects].each do |project|
-      mapping = project[:mapping]
-      config = mapping["#{configuration}|#{platform}"]
-      fail "No mapping found for config: #{configuration}|#{platform}" unless config
-
-      mapped_configuration, mapped_platform = config.split('|')
-      fail "No configuration, platform found for config: #{config}" unless configuration || platform
-
-      parsed_project = ProjectAnalyzer.new(project[:path]).analyze(mapped_configuration, mapped_platform)
-
-      projects_to_build << parsed_project
-    end
-
-    projects_to_build
+    outputs_hash
   end
 
   private
 
-  def platform_any_cpu?(platform)
-    downcase_platform = platform.downcase
-    return true if downcase_platform == 'anycpu' || downcase_platform == 'any cpu'
-    false
+  def type
+    return SOLUTION if @path.downcase.end_with? SLN_EXT
+    return PROJECT if @path.downcase.end_with? CSPROJ_EXT
+    raise "unsupported type for path: #{@path}"
   end
 
-  def fixed_mapping(project)
-    fixed_mapping = {}
+  def analyze_solution(solution_path)
+    @solution = {
+        path: solution_path,
+        base_dir: File.dirname(@path)
+    }
 
-    project_configs = ProjectAnalyzer.new(project[:path]).parse_configs
+    parse_solution_configs = false
+    parse_project_configs = false
 
-    project[:mapping].each do |s_config, p_config|
-      project_configs.each do |project_config|
-        project_config_in_solution = p_config
-        project_config_in_project = project_config
+    File.open(@solution[:path]).each do |line|
+      # Project
+      match = line.match(REGEX_SOLUTION_PROJECTS)
+      if match != nil && match.captures != nil && match.captures.count == 4
+        # Skip files that are directories or doesn't exist
+        project_path = File.join([@solution[:base_dir]].concat(match.captures[2].split('\\')))
 
-        configuration_in_solution, platform_in_solution = project_config_in_solution.split('|')
-        configuration_in_project, platform_in_project = project_config_in_project.split('|')
+        if File.file? project_path
+          @solution[:id] = match.captures[0]
+          (@solution[:projects] ||= []) << {
+              name: match.captures[1],
+              path: project_path,
+              id: match.captures[3],
+          }
+        else
+          puts "Warning: Skipping #{project_path}: directory or not found on file system"
+        end
+      end
 
-        next unless configuration_in_solution == configuration_in_project
+      # Solution configs
+      match = line.match(REGEX_SOLUTION_GLOBAL_CONFIG_END)
+      parse_solution_configs = false if match != nil
 
-        if platform_in_solution == platform_in_project
-          fixed_project_config = configuration_in_project + '|' + platform_in_project
-          fixed_mapping[s_config] = fixed_project_config
-        elsif platform_any_cpu?(platform_in_solution) && platform_any_cpu?(platform_in_project)
-          fixed_project_config = configuration_in_project + '|' + platform_in_project
-          fixed_mapping[s_config] = fixed_project_config
+      if parse_solution_configs
+        match = line.match(REGEX_SOLUTION_GLOBAL_SOLUTION_CONFIG)
+        if match != nil && match.captures != nil && match.captures.count == 2
+          (@solution[:configs] ||= []) << "#{match.captures[0]}|#{match.captures[1].delete(' ')}"
+        end
+      end
+
+      match = line.match(REGEX_SOLUTION_GLOBAL_SOLUTION_CONFIG_START)
+      parse_solution_configs = true if match != nil
+
+      # Project configs
+      match = line.match(REGEX_SOLUTION_GLOBAL_CONFIG_END)
+      parse_project_configs = false if match != nil
+
+      if parse_project_configs
+        match = line.match(REGEX_SOLUTION_GLOBAL_PROJECT_CONFIG)
+        if match != nil && match.captures != nil && match.captures.count == 5
+          project_id = match.captures[0]
+
+          project = project_with_id(project_id)
+          (project[:mappings] ||= {})["#{match.captures[1]}|#{match.captures[2].delete(' ')}"] = "#{match.captures[3]}|#{match.captures[4].strip.delete(' ')}"
+        end
+      end
+
+      match = line.match(REGEX_SOLUTION_GLOBAL_PROJECT_CONFIG_START)
+      parse_project_configs = true if match != nil
+    end
+  end
+
+  def analyze_project(project)
+    project_config = nil
+    referred_project_paths = nil
+
+    File.open(project[:path]).each do |line|
+      # Guid
+      match = line.match(REGEX_PROJECT_GUID)
+      if match != nil && match.captures != nil && match.captures.count == 1
+        if project[:id].casecmp(match.captures[0]) != 0
+          next
+        end
+      end
+
+      # output type
+      match = line.match(REGEX_PROJECT_OUTPUT_TYPE)
+      if match != nil && match.captures != nil && match.captures.count == 1
+        project[:output_type] = match.captures[0].downcase
+      end
+
+      # assembly name
+      match = line.match(REGEX_PROJECT_ASSEMBLY_NAME)
+      if match != nil && match.captures != nil && match.captures.count == 1
+        project[:assembly_name] = match.captures[0]
+      end
+
+      # android application
+      match = line.match(REGEX_PROJECT_ANDROID_APPLICATION)
+      if match != nil
+        project[:android_application] = true
+      end
+
+      # PropertyGroup with condition
+      match = line.match(REGEX_PROJECT_PROPERTY_GROUP_END)
+      project_config = nil if match
+
+      if project_config != nil
+        match = line.match(REGEX_PROJECT_OUTPUT_PATH)
+        if match != nil && match.captures != nil && match.captures.count == 1
+          project[:configs][project_config][:output_path] = File.join(match.captures[0].split('\\'))
+        end
+
+        match = line.match(REGEX_PROJECT_MTOUCH_ARCH)
+        if match != nil && match.captures != nil && match.captures.count == 1
+          project[:configs][project_config][:mtouch_arch] = match.captures[0].split(',').collect { |x| x.strip || x }
+        end
+
+        match = line.match(REGEX_PROJECT_SIGN_ANDROID)
+        project[:configs][project_config][:sign_android] = true if match != nil
+
+        match = line.match(REGEX_PROJECT_IPA_PACKAGE)
+        project[:configs][project_config][:ipa_package] = true if match != nil
+
+        match = line.match(REGEX_PROJECT_BUILD_IPA)
+        project[:configs][project_config][:build_ipa] = true if match != nil
+      end
+
+      match = line.match(REGEX_PROJECT_PROPERTY_GROUP_WITH_CONDITION)
+      if match != nil && match.captures != nil && match.captures.count == 2
+        project_config = "#{match.captures[0]}|#{match.captures[1].delete(' ')}"
+
+        (project[:configs] ||= {})[project_config] = {}
+      end
+
+      # API
+      match = line.match(REGEX_PROJECT_REFERENCE_XAMARIN_IOS)
+      project[:api] = 'ios' if match != nil
+
+      match = line.match(REGEX_PROJECT_REFERENCE_XAMARIN_ANDROID)
+      project[:api] = 'android' if match != nil
+
+      match = line.match(REGEX_PROJECT_REFERENCE_XAMARIN_UITEST)
+      project[:api] = 'uitest' if match != nil
+
+      # Referred projects
+      match = line.match(REGEX_PROJECT_PROJECT_REFERENCE_END)
+      referred_project_paths = nil if match
+
+      if referred_project_paths != nil
+        match = line.match(REGEX_PROJECT_REFERRED_PROJECT_ID)
+        if match != nil && match.captures != nil && match.captures.count == 1
+          (project[:referred_project_ids] ||= []) << match.captures[0]
+        end
+      end
+
+      match = line.match(REGEX_PROJECT_PROJECT_REFERENCE_START)
+      if match != nil && match.captures != nil && match.captures.count == 1
+        referred_project_paths = match.captures[0]
+      end
+    end
+
+    # Joint uitest project to projects
+    if project[:api].eql? 'uitest'
+      project[:referred_project_ids].each do |project_id|
+        referred_project = project_with_id(project_id)
+        next unless referred_project
+
+        (referred_project[:uitest_projects] ||= []) << project[:id]
+      end
+    end
+  end
+
+  def project_with_id(id)
+    return nil unless @solution
+
+    @solution[:projects].each do |project|
+      return project if project[:id].casecmp(id) == 0
+    end
+  end
+
+  def export_artifact(assembly_name, output_path, extension)
+    artifact_path = Dir[File.join(output_path, "#{assembly_name}#{extension}")].first
+
+    return nil if artifact_path == nil || !File.exists?(artifact_path)
+    artifact_path
+  end
+
+  def latest_archive_path(project_name)
+    default_archives_path = File.join(ENV['HOME'], 'Library/Developer/Xcode/Archives')
+    raise "No default Xcode archive path found at #{default_archives_path}" unless File.exist? default_archives_path
+
+    latest_archive = nil
+    latest_archive_date = nil
+
+    archives = Dir[File.join(default_archives_path, "**/#{project_name}*.xcarchive")]
+    archives.each do |archive_path|
+      match = archive_path.match(REGEX_ARCHIVE_DATE_TIME)
+
+      if match != nil && match.captures != nil && match.captures.size == 1
+        date = DateTime.strptime(match.captures[0], '%m-%d-%y %l.%M %p')
+
+        if !latest_archive_date || latest_archive_date < date
+          latest_archive_date = date
+          latest_archive = archive_path
         end
       end
     end
 
-    fixed_mapping
+    latest_archive
   end
-
-  def parse_projects
-    projects = []
-
-    # Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CreditCardValidator", "CreditCardValidator\CreditCardValidator.csproj", "{99A825A6-6F99-4B94-9F65-E908A6347F1E}"
-    p_regexp = 'Project\("{(?<solution_id>.*)}"\) = "(?<project_name>.*)", "(?<project_path>.*)", "{(?<project_id>.*)}"'
-
-    File.open(@path).each do |line|
-      match = line.match(p_regexp)
-
-      next if match == nil || match.captures == nil || match.captures.count != 4
-
-      solution_id = match.captures[0]
-      # project_name = match.captures[1]
-      project_path = match.captures[2].strip.gsub(/\\/, '/')
-      project_id = match.captures[3]
-
-      project_path = File.expand_path(project_path, File.dirname(@path))
-      next unless File.exist? project_path
-
-      projects << {
-          :solution_id => solution_id,
-          :path => project_path,
-          :id => project_id
-      }
-    end
-
-    projects
-  end
-
-  def parse_solution_configs
-    solution_configs = []
-
-    s_configs_start = 'GlobalSection(SolutionConfigurationPlatforms) = preSolution'
-    s_configs_end = 'EndGlobalSection'
-    is_next_s_config = false
-
-    File.open(@path).each do |line|
-
-      if line.include?(s_configs_start)
-        is_next_s_config = true
-        next
-      end
-
-      if line.include?(s_configs_end)
-        is_next_s_config = false
-        next
-      end
-
-      next unless is_next_s_config
-
-      config = line.split('=')[1].strip!
-      solution_configs << config
-
-    end
-
-    solution_configs
-  end
-
-  def parse_project_configs
-    project_configs = {}
-
-    is_next_p_config = false
-    p_configs_start = 'GlobalSection(ProjectConfigurationPlatforms) = postSolution'
-    p_configs_end = 'EndGlobalSection'
-    p_config_regexp = '{(?<project_id>.*)}.(?<solution_configuration_platform>.*|.*) = (?<project_configuration_platform>.*)'
-
-    File.open(@path).each do |line|
-      if line.include?(p_configs_start)
-        is_next_p_config = true
-        next
-      end
-
-      if line.include?(p_configs_end)
-        is_next_p_config = false
-        next
-      end
-
-      next unless is_next_p_config
-
-      match = line.match(p_config_regexp)
-
-      next if match == nil || match.captures == nil || match.captures.count != 3
-
-      project_id = match.captures[0]
-
-      s_config = match.captures[1].strip
-      s_config = s_config.split('.')[0] if s_config.include? '.'
-
-      p_config = match.captures[2].strip
-
-      project_configs[project_id] = {} unless project_configs[project_id]
-      project_configs[project_id][s_config] = p_config
-    end
-
-    project_configs
-  end
-
 end

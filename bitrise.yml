@@ -3,13 +3,9 @@ default_step_lib_source: https://github.com/bitrise-io/bitrise-steplib.git
 
 app:
   envs:
-  - XAMARIN_PROJECT: $XAMARIN_PROJECT
-  - BITRISE_XAMARIN_CONFIGURATION: $BITRISE_XAMARIN_CONFIGURATION
-  - BITRISE_XAMARIN_PLATFORM: $BITRISE_XAMARIN_PLATFORM
+  - BITRISE_PROJECT_PATH: $BITRISE_PROJECT_PATH
   - SIMULATOR_DEVICE: $SIMULATOR_DEVICE
   - SIMULATOR_OS_VERSION: $SIMULATOR_OS_VERSION
-  - TEST_TO_RUN: $TEST_TO_RUN
-  - $BITRISE_SOURCE_DIR: $$BITRISE_SOURCE_DIR
 
 workflows:
   test:
@@ -22,11 +18,6 @@ workflows:
     - path::./:
         title: Step test
         inputs:
-        - xamarin_project: $XAMARIN_PROJECT
-        - xamarin_configuration: $BITRISE_XAMARIN_CONFIGURATION
-        - xamarin_platform: $BITRISE_XAMARIN_PLATFORM
-        - is_clean_build: yes
-        - test_to_run: $TEST_TO_RUN
         - simulator_device: $SIMULATOR_DEVICE
         - simulator_os_version: $SIMULATOR_OS_VERSION
     - script:
@@ -40,7 +31,7 @@ workflows:
   share-this-step:
     envs:
       # if you want to share this step into a StepLib
-      - MY_STEPLIB_REPO_FORK_GIT_URL:
+      - MY_STEPLIB_REPO_FORK_GIT_URL: $MY_STEPLIB_REPO_FORK_GIT_URL
       - STEP_ID_IN_STEPLIB: xamarin-ios-test
       - STEP_GIT_VERION_TAG_TO_SHARE: 0.9.0
       - STEP_GIT_CLONE_URL: https://github.com/bitrise-steplib/steps-xamarin-ios-test.git

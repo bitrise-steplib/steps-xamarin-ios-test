@@ -22,38 +22,25 @@ inputs:
       description: |
         Path to Xamarin Project
       is_required: true
-      is_expand: true
   - xamarin_configuration: Debug
     opts:
       title: Xamarin project configuration
       description: |
         Xamarin project configuration
       is_required: true
-      is_expand: true
   - xamarin_platform: iPhoneSimulator
     opts:
       title: Xamarin platform
       description: |
         Xamarin platform
       is_required: true
-      is_expand: true
-  - is_clean_build: yes
-    opts:
-      title: "Do a clean before the archive?"
-      value_options:
-        - yes
-        - no
-      is_required: true
-      is_expand: true
   - test_to_run:
     opts:
       title: "Test name to run"
       description: |
         Comma-separated list of names of tests to run.
         If not specified all tests will run.
-      is_required: false
-      is_expand: true
-  - simulator_device: iPhone 6
+  - simulator_device: iPhone 6s Plus
     opts:
       title: "Device"
       description: |
@@ -67,16 +54,13 @@ inputs:
         * iPad
         * iPad Air
       is_required: true
-      is_expand: true
-  - simulator_os_version:
+  - simulator_os_version: iOS 9.3
     opts:
       title: "OS version"
       description: |
         A couple of format examples:
         * iOS 8.4
-        * iOS 9.1
-      is_required: false
-      is_expand: true
+        * iOS 9.3
 outputs:
 - BITRISE_XAMARIN_TEST_RESULT:
   opts:
