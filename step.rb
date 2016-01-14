@@ -65,12 +65,18 @@ def run_unit_test!(dll_path, test_to_run)
   nunit_path = ENV['NUNIT_PATH']
   fail_with_message('No NUNIT_PATH environment specified') unless nunit_path
 
-  nunit_console_path = File.join(nunit_path, 'nunit-console.exe')
+  nunit_console_path = File.join(nunit_path, 'nunit3-console.exe')
+  nunit_run_option="-test"
+  unless File.exist?(nunit_console_path)
+    # Nunit2 support
+    nunit_console_path = File.join(nunit_path, 'nunit-console.exe')
+    nunit_run_option="run"
+  end
 
   params = []
   params << @mono
   params << nunit_console_path
-  params << "-run=\"#{test_to_run}\"" unless test_to_run.to_s == ''
+  params << "-#{nunit_run_option}=\"#{test_to_run}\"" unless test_to_run.to_s == ''
   params << dll_path
 
   command = params.join(' ')
