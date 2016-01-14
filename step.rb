@@ -70,7 +70,7 @@ def run_unit_test!(dll_path, test_to_run)
   params = []
   params << @mono
   params << nunit_console_path
-  params << "--test=\"#{test_to_run}\"" unless test_to_run.to_s == ''
+  params << "-run=\"#{test_to_run}\"" unless test_to_run.to_s == ''
   params << dll_path
 
   command = params.join(' ')
