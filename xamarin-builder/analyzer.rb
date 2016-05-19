@@ -1,6 +1,8 @@
 require 'time'
 require 'pathname'
 
+require_relative 'common_constants'
+
 # -----------------------
 # --- Constants
 # -----------------------
@@ -8,48 +10,80 @@ require 'pathname'
 MDTOOL_PATH = "\"/Applications/Xamarin Studio.app/Contents/MacOS/mdtool\""
 
 CSPROJ_EXT = '.csproj'
+FSPROJ_EXT = '.fsproj'
 SHPROJ_EXT = '.shproj'
 SLN_EXT = '.sln'
 
 SOLUTION = 'solution'
 PROJECT = 'project'
 
+#
+# Solution regex
 REGEX_SOLUTION_PROJECTS = /Project\(\"(?<solution_id>[^\"]*)\"\) = \"(?<project_name>[^\"]*)\", \"(?<project_path>[^\"]*)\", \"(?<project_id>[^\"]*)\"/i
 REGEX_SOLUTION_GLOBAL_SOLUTION_CONFIG_START = /GlobalSection\(SolutionConfigurationPlatforms\) = preSolution/i
 REGEX_SOLUTION_GLOBAL_SOLUTION_CONFIG = /^\s*(?<config>[^|]*)\|(?<platform>[^|]*) =/i
 REGEX_SOLUTION_GLOBAL_PROJECT_CONFIG_START = /GlobalSection\(ProjectConfigurationPlatforms\) = postSolution/i
-REGEX_SOLUTION_GLOBAL_PROJECT_CONFIG = /(?<project_id>{[^}]*}).(?<config>(\w|\s)*)\|(?<platform>(\w|\s)*)\.Build.* = (?<mapped_config>(\w|\s)*)\|(?<mapped_platform>(\w|\s)*)/i
+REGEX_SOLUTION_GLOBAL_PROJECT_CONFIG = /(?<project_id>{[^}]*}).(?<config>.*)\|(?<platform>.*)\.Build.* = (?<mapped_config>.*)\|(?<mapped_platform>(.)*)/i
 REGEX_SOLUTION_GLOBAL_CONFIG_END = /EndGlobalSection/i
 
+#
+# Project regex
 REGEX_PROJECT_GUID = /<ProjectGuid>(?<project_id>.*)<\/ProjectGuid>/i
+REGEX_PROJECT_TYPE_GUIDS = /<ProjectTypeGuids>(?<project_type_guids>.*)<\/ProjectTypeGuids>/i
 REGEX_PROJECT_OUTPUT_TYPE = /<OutputType>(?<output_type>.*)<\/OutputType>/i
 REGEX_PROJECT_ASSEMBLY_NAME = /<AssemblyName>(?<assembly_name>.*)<\/AssemblyName>/i
-REGEX_PROJECT_MTOUCH_ARCH = /<MtouchArch>(?<arch>.*)<\/MtouchArch>/
-REGEX_PROJECT_PROPERTY_GROUP_WITH_CONDITION = /<PropertyGroup Condition=\" '\$\(Configuration\)\|\$\(Platform\)' == '(?<config>(\w|\s)*)\|(?<platform>(\w|\s)*)' \">/i
+REGEX_PROJECT_PROPERTY_GROUP_WITH_CONDITION = /<PropertyGroup Condition=\"\s*'\$\(Configuration\)\|\$\(Platform\)'\s*==\s*'(?<config>.*)\|(?<platform>.*)'\s*\">/i
 REGEX_PROJECT_PROPERTY_GROUP_END = /<\/PropertyGroup>/i
 REGEX_PROJECT_OUTPUT_PATH = /<OutputPath>(?<output_path>.*)<\/OutputPath>/i
-REGEX_PROJECT_IPA_PACKAGE = /<IpaPackageName>/i
-REGEX_PROJECT_BUILD_IPA = /<BuildIpa>True<\/BuildIpa>/i
-REGEX_PROJECT_ANDROID_APPLICATION= /<AndroidApplication>True<\/AndroidApplication>/i
-REGEX_PROJECT_SIGN_ANDROID = /<AndroidKeyStore>True<\/AndroidKeyStore>/i
-REGEX_PROJECT_REFERENCE_XAMARIN_IOS = /Include="Xamarin.iOS"/i
-REGEX_PROJECT_REFERENCE_XAMARIN_ANDROID = /Include="Mono.Android"/i
-REGEX_PROJECT_REFERENCE_XAMARIN_UITEST = /Include="Xamarin.UITest"/i
-
 REGEX_PROJECT_PROJECT_REFERENCE_START = /<ProjectReference Include="(?<project_path>.*)">/i
 REGEX_PROJECT_PROJECT_REFERENCE_END = /<\/ProjectReference>/i
 REGEX_PROJECT_REFERRED_PROJECT_ID = /<Project>(?<id>.*)<\/Project>/i
 
+#
+# Xamarin.iOS specific regex
+REGEX_PROJECT_IPA_PACKAGE = /<IpaPackageName>/i
+REGEX_PROJECT_BUILD_IPA = /<BuildIpa>True<\/BuildIpa>/i
+REGEX_PROJECT_MTOUCH_ARCH = /<MtouchArch>(?<arch>.*)<\/MtouchArch>/i
+
+#
+# Xamarin.Android specific regex
+REGEX_PROJECT_ANDROID_MANIFEST = /<AndroidManifest>(?<manifest_path>.*)<\/AndroidManifest>/i
+REGEX_PROJECT_ANDROID_PACKAGE_NAME = /<manifest.*package=\"(?<package_name>.*)\">/i
+REGEX_PROJECT_ANDROID_APPLICATION= /<AndroidApplication>True<\/AndroidApplication>/i
+REGEX_PROJECT_SIGN_ANDROID = /<AndroidKeyStore>True<\/AndroidKeyStore>/i
+
+#
+# Assembly references
+REGEX_PROJECT_REFERENCE_XAMARIN_UITEST = /Include="Xamarin.UITest"/i
+REGEX_PROJECT_REFERENCE_NUNIT_FRAMEWORK = /Include="nunit.framework"/i
+REGEX_PROJECT_REFERENCE_NUNIT_LITE_FRAMEWORK = /Include="MonoTouch.NUnitLite"/i
+
 REGEX_ARCHIVE_DATE_TIME = /\s(.*[AM]|[PM]).*\./i
 
 class Analyzer
+  @project_type_guids = {
+    ios: "FEACFBD2-3405-455C-9665-78FE426C6842",
+    mac: "A3F8F2AB-B479-4A4A-A458-A89E7DC349F1",
+    tvos: "06FA79CB-D6CD-4721-BB4B-1BD202089C55",
+    android: "EFBA0AD7-5A72-4C68-AF49-83D382785DCF"
+  }
+
+  class << self
+    attr_accessor :project_type_guids
+  end
+
   def analyze(path)
     @path = path
 
     case type
-      when SOLUTION
-        analyze_solution(@path)
-      when PROJECT
+    when SOLUTION
+      analyze_solution(@path)
+    when PROJECT
+      puts
+      puts "\e[32mYou are trying to build a project file at path #{@path}\e[0m"
+      puts "You should specify the solution path and set the type of the project you would like to build: [iOS|Android|Mac]"
+      puts
+      raise "Unsupported type detected"
     end
 
     @solution[:projects].each do |project|
@@ -63,7 +97,11 @@ class Analyzer
     puts @solution
   end
 
-  def build_commands(config, platform, project_type_filter)
+  def build_solution_command(config, platform)
+    mdtool_build_command('build', [config, platform].join('|'), @solution[:path])
+  end
+
+  def build_commands(config, platform, project_type_filter, id_filters = nil)
     configuration = "#{config}|#{platform}"
     build_commands = []
 
@@ -71,49 +109,46 @@ class Analyzer
       next unless project[:mappings]
       project_configuration = project[:mappings][configuration]
 
+      unless id_filters.nil?
+        next unless id_filters.include? project[:id]
+      end
+
       case project[:api]
-        when 'ios'
-          next unless project_type_filter.include? 'ios'
+        when Api::IOS
+          next unless project_type_filter.include? Api::IOS
           next unless project[:output_type].eql?('exe')
-          unless project_configuration
-            puts "Skipping: No configuration mapping found for (#{configuration}) in project #{project[:name]}" 
-            next
-          end
+          next unless project_configuration
 
-          archs = project[:configs][project_configuration][:mtouch_arch]
-          generate_archive = archs && archs.select { |x| x.downcase.start_with? 'arm' }.count == archs.count
+          generate_archive = should_generate_archives?(project[:configs][project_configuration][:mtouch_arch])
 
-          build_commands << [
-              MDTOOL_PATH,
-              generate_archive ? 'archive' : 'build',
-              "\"-c:#{configuration}\"",
-              @solution[:path],
-              "-p:#{project[:name]}"
-          ].join(' ')
-        when 'android'
-          next unless project_type_filter.include? 'android'
+          build_commands << mdtool_build_command('build', project_configuration, @solution[:path], project[:name])
+          build_commands << mdtool_build_command('archive', project_configuration, @solution[:path], project[:name]) if generate_archive
+        when Api::MAC
+          next unless project_type_filter.include? Api::MAC
+          next unless project[:output_type].eql?('exe')
+          next unless project_configuration
+
+          build_commands << mdtool_build_command('build', project_configuration, @solution[:path], project[:name])
+          build_commands << mdtool_build_command('archive', project_configuration, @solution[:path], project[:name])
+        when Api::ANDROID
+          next unless project_type_filter.include? Api::ANDROID
           next unless project[:android_application]
-          unless project_configuration
-            puts "Skipping: No configuration mapping found for (#{configuration}) in project #{project[:name]}"
-            next
-          end
+          next unless project_configuration
+
+          project_config, project_platform = project_configuration.split('|')
           sign_android = project[:configs][project_configuration][:sign_android]
 
-          build_commands << [
-              MDTOOL_PATH,
-              'build',
-              "\"-c:#{configuration}\"",
-              @solution[:path],
-              "-p:#{project[:name]}"
-          ].join(' ')
+          build_command = [
+              'xbuild',
+              sign_android ? '/t:SignAndroidPackage' : '/t:PackageForAndroid',
+              "/p:Configuration=\"#{project_config}\""
+          ]
+          build_command << "/p:Platform=\"#{project_platform}\"" unless project_platform.eql?("AnyCPU")
+          build_command << "\"#{project[:path]}\""
+          build_command << "/verbosity:minimal"
+          build_command << "/nologo"
 
-          build_commands << [
-            'xbuild',
-            sign_android ? '/t:SignAndroidPackage' : '/t:PackageForAndroid',
-            "/p:Configuration=#{project_configuration.split('|').first}",
-            "/p:Platform=#{project_configuration.split('|').last}",
-            project[:path]
-          ].join(' ')
+          build_commands << build_command
         else
           next
       end
@@ -122,29 +157,107 @@ class Analyzer
     build_commands
   end
 
-  def test_commands(config, platform)
+  def build_test_commands(config, platform, project_type_filter)
     configuration = "#{config}|#{platform}"
-    build_command = nil
+    build_commands = []
+    errors = []
 
     @solution[:projects].each do |project|
-      next unless project[:mappings]
-      project_configuration = project[:mappings][configuration]
+      # Check whether it is a UITest project
+      # Do this check as soon as possible,
+      # to allow collecting errors of building test command
+      # for relevant (UITest) projects.
+      next if project[:tests].nil? || !project[:tests].include?(Tests::UITEST)
 
-      next unless project[:api] == 'uitest'
-      unless project_configuration
-        puts "Skipping: No configuration mapping found for (#{configuration}) in project #{project[:name]}"
+      test_project = project[:name]
+
+      unless project[:mappings]
+        errors << "#{test_project} not found in solution mappings"
+        errors << project.to_s
         next
       end
 
-      build_command = [
-          MDTOOL_PATH,
-          'build',
-          "\"-c:#{configuration}\"",
-          @solution[:path],
-      ].join(' ')
+      project_configuration = project[:mappings][configuration]
+      unless project_configuration
+        errors << "no mapping found for #{test_project} with #{configuration}"
+        errors << project.to_s
+        next
+      end
+
+      # Checked referenced projects if it includes
+      # the correct project type [iOS|Android]
+      referred_projects = []
+      project[:referred_project_ids].each do |id|
+        referred_project = project_with_id(id)
+        referred_projects << referred_project if project_type_filter.include? referred_project[:api]
+      end
+
+      if referred_projects.empty?
+        errors << "#{test_project} does not refer to any #{project_type_filter} projects"
+        errors << project.to_s
+        next
+      end
+
+      referred_projects.each do |referred_project|
+        command = build_commands(config, platform, project_type_filter, referred_project[:id])
+        build_commands.concat(command) unless command.nil?
+      end
+
+      build_commands << mdtool_build_command('build', project_configuration, @solution[:path], project[:name])
     end
 
-    build_command
+    [build_commands, errors]
+  end
+
+  def nunit_test_commands(config, platform, options)
+    configuration = "#{config}|#{platform}"
+    build_commands = []
+    errors = []
+
+    nunit_path = ENV['NUNIT_PATH']
+    nunit_console_path = File.join(nunit_path, 'nunit3-console.exe')
+    raise "nunit3-console.exe not found at path: #{nunit_console_path}" unless File.exists?(nunit_console_path)
+
+    @solution[:projects].each do |project|
+      # Check whether it is a Nunit project
+      # Do this check as soon as possible,
+      # to allow collecting errors of building test command
+      # for relevant (Nunit) projects.
+      next if project[:tests].nil? || !project[:tests].include?(Tests::NUNIT) || project[:tests].include?(Tests::UITEST)
+
+      test_project = project[:name]
+
+      unless project[:mappings]
+        errors << "#{test_project} not found in solution mappings"
+        errors << project.to_s
+        next
+      end
+
+      project_configuration = project[:mappings][configuration]
+      unless project_configuration
+        errors << "no mapping found for #{test_project} with #{configuration}"
+        errors << project.to_s
+        next
+      end
+
+      project_config = project_configuration.split('|').first
+      unless project_config
+        errors << "#{test_project} configuration #{project_configuration} is invalid"
+        errors << project.to_s
+        next
+      end
+
+      command = [
+          "mono",
+          "\"#{nunit_console_path}\"",
+          "\"#{project[:path]}\"",
+          "\"/config:#{project_config}\""
+      ]
+      command << options unless options.nil?
+      build_commands << command
+    end
+
+    [build_commands, errors]
   end
 
   def collect_generated_files(config, platform, project_type_filter)
@@ -157,89 +270,78 @@ class Analyzer
       project_configuration = project[:mappings][configuration]
 
       case project[:api]
-        when 'ios'
-          next unless project_type_filter.include? 'ios'
-          next unless project[:output_type].eql?('exe')
-          next unless project_configuration
+      when Api::IOS
+        next unless project_type_filter.include? Api::IOS
+        next unless project[:output_type].eql?('exe')
+        next unless project_configuration
 
-          archs = project[:configs][project_configuration][:mtouch_arch]
-          generate_archive = archs && archs.select { |x| x.downcase.start_with? 'arm' }.count == archs.count
+        generate_archive = should_generate_archives?(project[:configs][project_configuration][:mtouch_arch])
 
-          project_path = project[:path]
-          project_dir = File.dirname(project_path)
-          rel_output_dir = project[:configs][project_configuration][:output_path]
-          full_output_dir = File.join(project_dir, rel_output_dir)
+        project_path = project[:path]
+        project_dir = File.dirname(project_path)
+        rel_output_dir = project[:configs][project_configuration][:output_path]
+        full_output_dir = File.join(project_dir, rel_output_dir)
 
-          outputs_hash[project[:id]] = {}
-          if generate_archive
-            full_output_path = latest_archive_path(project[:name])
+        outputs_hash[project[:id]] = {}
+        if generate_archive
+          full_output_path = latest_archive_path(project[:name])
 
-            next unless full_output_path
-
-            outputs_hash[project[:id]][:xcarchive] = full_output_path
-          else
-            full_output_path = export_artifact(project[:assembly_name], full_output_dir, '.app')
-
-            next unless full_output_path
-
-            outputs_hash[project[:id]][:app] = full_output_path
-
-            # Search for test dll
-            next unless project[:uitest_projects]
-
-            project[:uitest_projects].each do |test_project_id|
-              test_project = project_with_id(test_project_id)
-              test_project_configuration = test_project[:mappings][configuration]
-
-              next unless test_project_configuration
-
-              test_project_path = test_project[:path]
-              test_project_dir = File.dirname(test_project_path)
-              test_rel_output_dir = test_project[:configs][test_project_configuration][:output_path]
-              test_full_output_dir = File.join(test_project_dir, test_rel_output_dir)
-
-              test_full_output_path = export_artifact(test_project[:assembly_name], test_full_output_dir, '.dll')
-
-              (outputs_hash[project[:id]][:uitests] ||= []) << test_full_output_path
-            end
-          end
-        when 'android'
-          next unless project_type_filter.include? 'android'
-          next unless project[:android_application]
-          next unless project_configuration
-
-          project_path = project[:path]
-          project_dir = File.dirname(project_path)
-          rel_output_dir = project[:configs][project_configuration][:output_path]
-          full_output_dir = File.join(project_dir, rel_output_dir)
-
-          full_output_path = export_artifact('*', full_output_dir, '.apk')
-
-          next unless full_output_path
-
-          outputs_hash[project[:id]] = {}
-          outputs_hash[project[:id]][:apk] = full_output_path
-
-          # Search for test dll
-          next unless project[:uitest_projects]
-
-          project[:uitest_projects].each do |test_project_id|
-            test_project = project_with_id(test_project_id)
-            test_project_configuration = test_project[:mappings][configuration]
-
-            next unless test_project_configuration
-
-            test_project_path = test_project[:path]
-            test_project_dir = File.dirname(test_project_path)
-            test_rel_output_dir = test_project[:configs][test_project_configuration][:output_path]
-            test_full_output_dir = File.join(test_project_dir, test_rel_output_dir)
-
-            test_full_output_path = export_artifact(test_project[:assembly_name], test_full_output_dir, '.dll')
-
-            (outputs_hash[project[:id]][:uitests] ||= []) << test_full_output_path
-          end
+          outputs_hash[project[:id]][:xcarchive] = full_output_path if full_output_path
         else
-          next
+          full_output_path = export_artifact(project[:assembly_name], full_output_dir, '.app')
+
+          outputs_hash[project[:id]][:app] = full_output_path if full_output_path
+          end
+      when Api::MAC
+        next unless project_type_filter.include? Api::MAC
+        next unless project[:output_type].eql?('exe')
+        next unless project_configuration
+
+        outputs_hash[project[:id]] = {}
+        full_output_path = latest_archive_path(project[:name])
+
+        outputs_hash[project[:id]][:xcarchive] = full_output_path if full_output_path
+      when Api::ANDROID
+        next unless project_type_filter.include? Api::ANDROID
+        next unless project[:android_application]
+        next unless project_configuration
+
+        project_path = project[:path]
+        project_dir = File.dirname(project_path)
+        rel_output_dir = project[:configs][project_configuration][:output_path]
+        full_output_dir = File.join(project_dir, rel_output_dir)
+
+        package_name = project[:android_manifest_path].nil? ? '*' : android_package_name(project[:android_manifest_path])
+
+        full_output_path = nil
+        full_output_path = export_artifact(package_name, full_output_dir, '.apk') if package_name
+        full_output_path = export_artifact('*', full_output_dir, '.apk') unless full_output_path
+
+        outputs_hash[project[:id]] = {}
+        outputs_hash[project[:id]][:apk] = full_output_path if full_output_path
+      else
+        next
+      end
+
+      # Search for test dll
+      next unless project[:uitest_projects]
+
+      project[:uitest_projects].each do |test_project_id|
+        test_project = project_with_id(test_project_id)
+        next unless test_project
+
+        test_project_configuration = test_project[:mappings][configuration]
+        next unless test_project_configuration
+        next unless test_project[:configs][test_project_configuration]
+
+        test_project_path = test_project[:path]
+        test_project_dir = File.dirname(test_project_path)
+        test_rel_output_dir = test_project[:configs][test_project_configuration][:output_path]
+        test_full_output_dir = File.join(test_project_dir, test_rel_output_dir)
+
+        test_full_output_path = export_artifact(test_project[:assembly_name], test_full_output_dir, '.dll')
+
+        (outputs_hash[project[:id]][:uitests] ||= []) << test_full_output_path if test_full_output_path
       end
     end
 
@@ -248,9 +350,20 @@ class Analyzer
 
   private
 
+  def android_package_name(manifest_path)
+    File.open(manifest_path).each do |line|
+      match = line.match(REGEX_PROJECT_ANDROID_PACKAGE_NAME)
+      if match != nil && match.captures != nil && match.captures.count == 1
+        return match.captures[0]
+      end
+    end
+
+    nil
+  end
+
   def type
     return SOLUTION if @path.downcase.end_with? SLN_EXT
-    return PROJECT if @path.downcase.end_with? CSPROJ_EXT
+    return PROJECT if @path.downcase.end_with? CSPROJ_EXT or @path.downcase.end_with? FSPROJ_EXT
     raise "unsupported type for path: #{@path}"
   end
 
@@ -277,8 +390,6 @@ class Analyzer
               path: project_path,
               id: match.captures[3],
           }
-        else
-          puts "Warning: Skipping #{project_path}: directory or not found on file system"
         end
       end
 
@@ -289,7 +400,9 @@ class Analyzer
       if parse_solution_configs
         match = line.match(REGEX_SOLUTION_GLOBAL_SOLUTION_CONFIG)
         if match != nil && match.captures != nil && match.captures.count == 2
-          (@solution[:configs] ||= []) << "#{match.captures[0]}|#{match.captures[1].delete(' ')}"
+          configuration =  match.captures[0].strip
+          platform = match.captures[1].strip
+          (@solution[:configs] ||= []) << "#{configuration}|#{platform}"
         end
       end
 
@@ -304,9 +417,16 @@ class Analyzer
         match = line.match(REGEX_SOLUTION_GLOBAL_PROJECT_CONFIG)
         if match != nil && match.captures != nil && match.captures.count == 5
           project_id = match.captures[0]
+          solution_configuration = match.captures[1].strip
+          solution_platform = match.captures[2].strip
+          project_configuration = match.captures[3].strip
+          project_platform = match.captures[4].strip
+          project_platform = "AnyCPU" if project_platform.eql? 'Any CPU' # Fix MS bug
 
           project = project_with_id(project_id)
-          (project[:mappings] ||= {})["#{match.captures[1]}|#{match.captures[2].delete(' ')}"] = "#{match.captures[3]}|#{match.captures[4].strip.delete(' ')}"
+          next unless project
+
+          (project[:mappings] ||= {})["#{solution_configuration}|#{solution_platform}"] = "#{project_configuration}|#{project_platform}"
         end
       end
 
@@ -328,6 +448,12 @@ class Analyzer
         end
       end
 
+      # Project type guid
+      match = line.match(REGEX_PROJECT_TYPE_GUIDS)
+      if match != nil && match.captures != nil && match.captures.count == 1
+        project[:project_type_guids] = match.captures[0]
+      end
+
       # output type
       match = line.match(REGEX_PROJECT_OUTPUT_TYPE)
       if match != nil && match.captures != nil && match.captures.count == 1
@@ -338,6 +464,13 @@ class Analyzer
       match = line.match(REGEX_PROJECT_ASSEMBLY_NAME)
       if match != nil && match.captures != nil && match.captures.count == 1
         project[:assembly_name] = match.captures[0]
+      end
+
+      # manifest path
+      match = line.match(REGEX_PROJECT_ANDROID_MANIFEST)
+      if match != nil && match.captures != nil && match.captures.count == 1
+        project_dir = File.dirname(project[:path])
+        project[:android_manifest_path] = File.join([project_dir].concat(match.captures[0].split('\\')))
       end
 
       # android application
@@ -373,20 +506,22 @@ class Analyzer
 
       match = line.match(REGEX_PROJECT_PROPERTY_GROUP_WITH_CONDITION)
       if match != nil && match.captures != nil && match.captures.count == 2
-        project_config = "#{match.captures[0]}|#{match.captures[1].delete(' ')}"
+        configuration = match.captures[0].strip
+        platform = match.captures[1].strip
+        project_config = "#{configuration}|#{platform}"
 
         (project[:configs] ||= {})[project_config] = {}
       end
 
       # API
-      match = line.match(REGEX_PROJECT_REFERENCE_XAMARIN_IOS)
-      project[:api] = 'ios' if match != nil
-
-      match = line.match(REGEX_PROJECT_REFERENCE_XAMARIN_ANDROID)
-      project[:api] = 'android' if match != nil
+      match = line.match(REGEX_PROJECT_TYPE_GUIDS)
+      project[:api] = identify_project_api(match.captures.first) if match != nil && match.captures != nil && match.captures.count == 1
 
       match = line.match(REGEX_PROJECT_REFERENCE_XAMARIN_UITEST)
-      project[:api] = 'uitest' if match != nil
+      (project[:tests] ||= []) << Tests::UITEST if match != nil
+
+      match = line.match(REGEX_PROJECT_REFERENCE_NUNIT_FRAMEWORK)
+      (project[:tests] ||= []) << Tests::NUNIT if match != nil
 
       # Referred projects
       match = line.match(REGEX_PROJECT_PROJECT_REFERENCE_END)
@@ -406,7 +541,7 @@ class Analyzer
     end
 
     # Joint uitest project to projects
-    if project[:api].eql? 'uitest'
+    if !project[:tests].nil? && project[:tests].include?(Tests::UITEST) && !project[:referred_project_ids].nil?
       project[:referred_project_ids].each do |project_id|
         referred_project = project_with_id(project_id)
         next unless referred_project
@@ -416,12 +551,42 @@ class Analyzer
     end
   end
 
+  def mdtool_configuration(project_configuration)
+    config, platform = project_configuration.split('|')
+    (mdtool_config ||= [] ) << config
+
+    if !platform.eql?("AnyCPU") && !platform.eql?("Any CPU")
+      mdtool_config << platform
+    end
+
+    mdtool_config.join('|')
+  end
+
+  def mdtool_build_command(action, project_configuration, solution, project = nil)
+    raise "Undefined mdtool action found (#{action})" unless ['build', 'archive'].include? action
+
+    command = [
+      MDTOOL_PATH,
+      action,
+      "\"-c:#{mdtool_configuration(project_configuration)}\"",
+      "\"#{solution}\""
+    ]
+    command << "\"-p:#{project}\"" if project
+    return command
+  end
+
+  def should_generate_archives?(architectures)
+    return true if architectures.nil? || architectures.empty? # default is armv7
+    architectures && architectures.select { |x| x.downcase.start_with? 'arm' }.count == architectures.count
+  end
+
   def project_with_id(id)
     return nil unless @solution
 
     @solution[:projects].each do |project|
       return project if project[:id].casecmp(id) == 0
     end
+    return nil
   end
 
   def export_artifact(assembly_name, output_path, extension)
@@ -453,5 +618,17 @@ class Analyzer
     end
 
     latest_archive
+  end
+
+  def identify_project_api(project_type_guids)
+    if project_type_guids.include? Analyzer.project_type_guids[:ios]
+      Api::IOS
+    elsif project_type_guids.include? Analyzer.project_type_guids[:android]
+      Api::ANDROID
+    elsif project_type_guids.include? Analyzer.project_type_guids[:mac]
+      Api::MAC
+    elsif project_type_guids.include? Analyzer.project_type_guids[:tvos]
+      Api::TVOS
+    end
   end
 end
