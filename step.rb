@@ -123,6 +123,7 @@ fail_with_message('nunit3-console.exe not found') unless File.exist?(nunit_conso
 
 builder = Builder.new(options[:project], options[:configuration], options[:platform], 'ios')
 begin
+  builder.build
   builder.build_test
 rescue => ex
   error_with_message(ex.inspect.to_s)
