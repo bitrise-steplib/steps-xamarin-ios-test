@@ -143,7 +143,7 @@ output.each do |_, project_output|
 
   next if app.nil? || uitests.nil?
 
-  ENV['APP_BUNDLE_PATH'] = app
+  ENV['APP_BUNDLE_PATH'] = File.expand_path(app)
 
   uitests.each do |dll_path|
     any_uitest_built = true
