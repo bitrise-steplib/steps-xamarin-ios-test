@@ -15,6 +15,29 @@ workflows:
         run_if: true
         inputs:
         - path: $BITRISE_SOURCE_DIR
+    - script:
+        title: Cleanup
+        inputs:
+        - content: |-
+            #!/bin/bash
+
+            set -e
+
+            IFS=$'\n'
+            for bin_pth in $(find "." -type d -maxdepth 2 -ipath '*/bin')
+            do
+              echo "removing: $bin_pth"
+              rm -rf $bin_pth
+            done
+            unset IFS
+
+            IFS=$'\n'
+            for obj_pth in $(find "." -type d -maxdepth 2 -ipath '*/obj')
+            do
+              echo "removing: $obj_pth"
+              rm -rf $obj_pth
+            done
+            unset IFS
     - path::./:
         title: Step test
         inputs:
