@@ -18,9 +18,9 @@ run_if: ""
 inputs:
   - xamarin_project: $BITRISE_PROJECT_PATH
     opts:
-      title: Path to Xamarin Project
+      title: Path to Xamarin Solution
       description: |
-        Path to Xamarin Project
+        Path to Xamarin Solution
       is_required: true
   - xamarin_configuration: Debug
     opts:
