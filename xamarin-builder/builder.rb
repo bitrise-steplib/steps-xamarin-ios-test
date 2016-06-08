@@ -12,7 +12,7 @@ class Builder
     @path = path
     @configuration = configuration
     @platform = platform
-    @project_type_filter = project_type_filter || [Api::IOS, Api::ANDROID, Api::MAC]
+    @project_type_filter = project_type_filter || [Api::IOS, Api::TVOS, Api::ANDROID, Api::MAC]
 
     @analyzer = Analyzer.new
     @analyzer.analyze(@path)
