@@ -139,6 +139,10 @@ fail_with_message 'No output generated' if output.nil? || output.empty?
 any_uitest_built = false
 
 output.each do |_, project_output|
+  api = project_output[:api]
+
+  next unless api.eql? Api::IOS
+
   app = project_output[:app]
   uitests = project_output[:uitests]
 
