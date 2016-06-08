@@ -1,6 +1,10 @@
-## Changelog (Current version: 1.0.0)
+## Changelog (Current version: 1.0.1)
 
 -----------------
+
+### 1.0.1 (2016 Jun 08)
+
+* [505c3ad] xamarin_project points to Xamarin Solution
 
 ### 1.0.0 (2016 Jun 08)
 
