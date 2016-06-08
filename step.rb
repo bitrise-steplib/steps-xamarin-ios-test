@@ -19,38 +19,32 @@ require_relative 'xamarin-builder/common_constants'
 # --- Functions
 # -----------------------
 
-def log_info(message)
+def puts_info(message)
   puts
   puts "\e[34m#{message}\e[0m"
 end
 
-def log_details(message)
+def puts_details(message)
   puts "  #{message}"
 end
 
-def log_done(message)
+def puts_done(message)
   puts "  \e[32m#{message}\e[0m"
 end
 
-def log_warning(message)
+def puts_warning(message)
   puts "\e[33m#{message}\e[0m"
 end
 
-def log_error(message)
+def puts_error(message)
   puts "\e[31m#{message}\e[0m"
 end
 
-def log_fail(message)
+def puts_fail(message)
   system('envman add --key BITRISE_XAMARIN_TEST_RESULT --value failed')
 
   puts "\e[31m#{message}\e[0m"
   exit(1)
-end
-
-def to_bool(value)
-  return true if value == true || value =~ (/^(true|t|yes|y|1)$/i)
-  return false if value == false || value.nil? || value == '' || value =~ (/^(false|f|no|n|0)$/i)
-  log_fail("Invalid value for Boolean: \"#{value}\"")
 end
 
 def simulator_udid_and_state(simulator_device, os_version)
@@ -109,60 +103,57 @@ parser.parse!
 
 #
 # Print options
-puts
-puts '========== Configs =========='
-puts " * project: #{options[:project]}"
-puts " * configuration: #{options[:configuration]}"
-puts " * platform: #{options[:platform]}"
-puts " * test_to_run: #{options[:test_to_run]}"
-puts " * simulator_device: #{options[:device]}"
-puts " * simulator_os: #{options[:os]}"
+puts_info 'Configs:'
+puts_details "* project: #{options[:project]}"
+puts_details "* configuration: #{options[:configuration]}"
+puts_details "* platform: #{options[:platform]}"
+puts_details "* test_to_run: #{options[:test_to_run]}"
+puts_details "* simulator_device: #{options[:device]}"
+puts_details "* simulator_os: #{options[:os]}"
 
 #
 # Validate options
-log_fail('No project file found') unless options[:project] && File.exist?(options[:project])
-log_fail('configuration not specified') unless options[:configuration]
-log_fail('platform not specified') unless options[:platform]
-log_fail('simulator_device not specified') unless options[:device]
-log_fail('simulator_os_version not specified') unless options[:os]
+puts_fail('No project file found') unless options[:project] && File.exist?(options[:project])
+puts_fail('configuration not specified') unless options[:configuration]
+puts_fail('platform not specified') unless options[:platform]
+puts_fail('simulator_device not specified') unless options[:device]
+puts_fail('simulator_os_version not specified') unless options[:os]
 
 udid, state = simulator_udid_and_state(options[:device], options[:os])
-log_fail('failed to get simulator udid') unless udid || state
+puts_fail('failed to get simulator udid') unless udid || state
 
-puts " * simulator_UDID: #{udid}"
+puts_details "* simulator_UDID: #{udid}"
 
 #
 # Main
 nunit_path = ENV['NUNIT_2_PATH']
-log_fail('No NUNIT_2_PATH environment specified') unless nunit_path
+puts_fail('No NUNIT_2_PATH environment specified') unless nunit_path
 
 nunit_console_path = File.join(nunit_path, 'nunit-console.exe')
-log_fail('nunit-console.exe not found') unless File.exist?(nunit_console_path)
+puts_fail('nunit-console.exe not found') unless File.exist?(nunit_console_path)
 
 builder = Builder.new(options[:project], options[:configuration], options[:platform],[Api::IOS])
 begin
   builder.build
   builder.build_test
 rescue => ex
-  log_error(ex.inspect.to_s)
-  log_error('--- Stack trace: ---')
-  log_error(ex.backtrace.to_s)
+  puts_error(ex.inspect.to_s)
+  puts_error('--- Stack trace: ---')
+  puts_error(ex.backtrace.to_s)
   exit(1)
 end
 
 output = builder.generated_files
-log_fail 'No output generated' if output.nil? || output.empty?
+puts_fail 'No output generated' if output.nil? || output.empty?
 
 any_uitest_built = false
 
 output.each do |_, project_output|
   api = project_output[:api]
-
   next unless api.eql? Api::IOS
 
   app = project_output[:app]
   uitests = project_output[:uitests]
-
   next if app.nil? || uitests.nil?
 
   ENV['APP_BUNDLE_PATH'] = File.expand_path(app)
@@ -170,8 +161,7 @@ output.each do |_, project_output|
   uitests.each do |dll_path|
     any_uitest_built = true
 
-    puts
-    log_info "Running UITest agains #{app}"
+    puts_info "Running UITest agains #{app}"
 
     params = [
       @mono,
@@ -194,7 +184,7 @@ output.each do |_, project_output|
       file.close
 
       system("envman add --key BITRISE_XAMARIN_TEST_FULL_RESULTS_TEXT --value \"#{result_log}\"") if result_log.to_s != ''
-      log_details "Logs are available at path: #{@result_log_path}"
+      puts_details "Logs are available at path: #{@result_log_path}"
       puts
     end
 
@@ -204,12 +194,12 @@ output.each do |_, project_output|
     failed_tests = doc.xpath('//test-case[@result="Failed"]')
 
     if !failed_tests.empty?
-      log_info 'Parsed TestResults.xml'
+      puts_info 'Parsed TestResults.xml'
 
       failed_tests.each do |failed_test|
         puts
-        log_error failed_test['name'].to_s
-        log_error failed_test.xpath('./failure/message').text.to_s
+        puts_error failed_test['name'].to_s
+        puts_error failed_test.xpath('./failure/message').text.to_s
 
         puts 'Stack trace:'
         puts failed_test.xpath('./failure/stack-trace').text
@@ -221,18 +211,18 @@ output.each do |_, project_output|
       puts
     end
 
-    log_fail('UITest execution failed')
+    puts_fail('UITest execution failed')
   end
 
   # Set output envs
   system('envman add --key BITRISE_XAMARIN_TEST_RESULT --value succeeded')
-  log_done 'UITests finished with success'
+  puts_done 'UITests finished with success'
 
   system("envman add --key BITRISE_XAMARIN_TEST_FULL_RESULTS_TEXT --value #{@result_log_path}") if @result_log_path
-  puts "Logs are available at: #{@result_log_path}"
+  puts_details "Logs are available at: #{@result_log_path}"
 end
 
 unless any_uitest_built
   puts "generated_files: #{output}"
-  log_fail 'No app or test dll found in outputs'
+  puts_fail 'No app or test dll found in outputs'
 end
