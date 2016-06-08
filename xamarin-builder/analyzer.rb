@@ -54,9 +54,12 @@ REGEX_PROJECT_SIGN_ANDROID = /<AndroidKeyStore>True<\/AndroidKeyStore>/i
 
 #
 # Assembly references
-REGEX_PROJECT_REFERENCE_XAMARIN_UITEST = /Include="Xamarin.UITest"/i
-REGEX_PROJECT_REFERENCE_NUNIT_FRAMEWORK = /Include="nunit.framework"/i
-REGEX_PROJECT_REFERENCE_NUNIT_LITE_FRAMEWORK = /Include="MonoTouch.NUnitLite"/i
+# <Reference Include="Xamarin.UITest">
+REGEX_PROJECT_REFERENCE_XAMARIN_UITEST = /Include="Xamarin.UITest/i
+# <Reference Include="nunit.framework, Version=2.6.4.14350, Culture=neutral, PublicKeyToken=96d09a1eb7f44a77, processorArchitecture=MSIL">
+REGEX_PROJECT_REFERENCE_NUNIT_FRAMEWORK = /Include="nunit.framework/i
+# <Reference Include="MonoTouch.NUnitLite" />
+REGEX_PROJECT_REFERENCE_NUNIT_LITE_FRAMEWORK = /Include="MonoTouch.NUnitLite/i
 
 REGEX_ARCHIVE_DATE_TIME = /\s(.*[AM]|[PM]).*\./i
 
@@ -114,8 +117,8 @@ class Analyzer
       end
 
       case project[:api]
-        when Api::IOS
-          next unless project_type_filter.include? Api::IOS
+        when Api::IOS, Api::TVOS
+          next unless project_type_filter.any? { |api| [Api::IOS, Api::TVOS].include? api }
           next unless project[:output_type].eql?('exe')
           next unless project_configuration
 
@@ -189,6 +192,19 @@ class Analyzer
       referred_projects = []
       project[:referred_project_ids].each do |id|
         referred_project = project_with_id(id)
+
+        unless referred_project
+          errors << "project reference exist with project id: #{id}, but project not found in solution"
+          errors << project.to_s
+          next
+        end
+
+        unless referred_project[:api]
+          errors << "no api found for referred project: #{referred_project}"
+          errors << project.to_s
+          next
+        end
+
         referred_projects << referred_project if project_type_filter.include? referred_project[:api]
       end
 
@@ -270,8 +286,8 @@ class Analyzer
       project_configuration = project[:mappings][configuration]
 
       case project[:api]
-      when Api::IOS
-        next unless project_type_filter.include? Api::IOS
+      when Api::IOS, Api::TVOS
+        next unless project_type_filter.any? { |api| [Api::IOS, Api::TVOS].include? api }
         next unless project[:output_type].eql?('exe')
         next unless project_configuration
 
@@ -291,7 +307,9 @@ class Analyzer
           full_output_path = export_artifact(project[:assembly_name], full_output_dir, '.app')
 
           outputs_hash[project[:id]][:app] = full_output_path if full_output_path
-          end
+        end
+
+        outputs_hash[project[:id]][:api] = project[:api]
       when Api::MAC
         next unless project_type_filter.include? Api::MAC
         next unless project[:output_type].eql?('exe')
@@ -301,6 +319,7 @@ class Analyzer
         full_output_path = latest_archive_path(project[:name])
 
         outputs_hash[project[:id]][:xcarchive] = full_output_path if full_output_path
+        outputs_hash[project[:id]][:api] = project[:api]
       when Api::ANDROID
         next unless project_type_filter.include? Api::ANDROID
         next unless project[:android_application]
@@ -319,6 +338,7 @@ class Analyzer
 
         outputs_hash[project[:id]] = {}
         outputs_hash[project[:id]][:apk] = full_output_path if full_output_path
+        outputs_hash[project[:id]][:api] = project[:api]
       else
         next
       end

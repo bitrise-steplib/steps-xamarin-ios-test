@@ -4,6 +4,7 @@ require 'timeout'
 require 'nokogiri'
 
 require_relative 'xamarin-builder/builder'
+require_relative 'xamarin-builder/common_constants'
 
 # -----------------------
 # --- Constants
@@ -121,7 +122,7 @@ nunit_console_path = File.join(nunit_path, 'nunit3-console.exe')
 fail_with_message('nunit3-console.exe not found') unless File.exist?(nunit_console_path)
 
 
-builder = Builder.new(options[:project], options[:configuration], options[:platform], 'ios')
+builder = Builder.new(options[:project], options[:configuration], options[:platform],[Api::IOS])
 begin
   builder.build
   builder.build_test
