@@ -47,6 +47,62 @@ def puts_fail(message)
   exit(1)
 end
 
+# Returns:
+#  0, if version_str_1 == version_str_2
+#  1, if version_str_1 > version_str_2
+# -1, if version_str_1 < version_str_2
+def compare_versions(version_str_1,version_str_2)
+  v1 = version_str_1.split('.').collect(&:to_i)
+  v2 = version_str_2.split('.').collect(&:to_i)
+  puts "compare: #{version_str_1} <> #{version_str_2}"
+
+  # pad with zeroes so they're the same length
+  v1.push(0) while v1.length < v2.length
+  v2.push(0) while v2.length < v1.length
+
+  pairs = v1.zip(v2)
+  pairs.each do |pair|
+    diff = pair[0] - pair[1]
+    puts "pair: #{pair} - diff: #{diff}"
+    return 1 if diff > 0
+    return -1 if diff < 0
+  end
+
+  0
+end
+
+# Returns:
+#  true, if version_str_1 < version_str_2
+#  false, otherwise
+def version_greater?(version_str_1, version_str_2)
+  diff = compare_versions(version_str_1, version_str_2)
+  (diff == -1)
+end
+
+def latest_ios_version
+  # iOS 9.3 (9.3 - 13E230) (com.apple.CoreSimulator.SimRuntime.iOS-9-3)
+  ios_regex = /iOS ([0-9.]+) \(.+\) \(.+\)/
+  latest_ios_version = ''
+
+  out = `xcrun simctl list runtimes`
+
+  out.each_line do |line|
+    match = line.match(ios_regex)
+    next unless match
+
+    captures = match.captures
+    next unless captures
+
+    ios_version = captures.first
+    next unless ios_version
+
+    latest_ios_version = ios_version if latest_ios_version == ''
+    latest_ios_version = ios_version if version_greater?(latest_ios_version, ios_version)
+  end
+
+  latest_ios_version
+end
+
 def simulator_udid_and_state(simulator_device, os_version)
   os_found = false
   os_regex = "-- #{os_version} --"
@@ -113,11 +169,18 @@ puts_details "* simulator_os: #{options[:os]}"
 
 #
 # Validate options
-puts_fail('No project file found') unless options[:project] && File.exist?(options[:project])
+puts_fail('no project file found') unless options[:project] && File.exist?(options[:project])
 puts_fail('configuration not specified') unless options[:configuration]
 puts_fail('platform not specified') unless options[:platform]
 puts_fail('simulator_device not specified') unless options[:device]
 puts_fail('simulator_os_version not specified') unless options[:os]
+
+if options[:os] == 'latest'
+  version = latest_ios_version
+  puts_fail 'failed to find latest ios version' if version.to_s == ''
+  options[:os] = 'iOS ' + version
+  puts_details "* lates_simulator_os: #{options[:os]}"
+end
 
 udid, state = simulator_udid_and_state(options[:device], options[:os])
 puts_fail('failed to get simulator udid') unless udid || state
