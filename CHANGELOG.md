@@ -1,6 +1,14 @@
-## Changelog (Current version: 1.0.1)
+## Changelog (Current version: 1.0.2)
 
 -----------------
+
+### 1.0.2 (2016 Jun 09)
+
+* [cb319eb] prepare for 1.02
+* [b073e29] Merge pull request #22 from bitrise-steplib/step_yml_fixes
+* [7e3cff4] step.yml updates
+* [238b868] log refractor
+* [e04e0e0] v1.0.1
 
 ### 1.0.1 (2016 Jun 08)
 
@@ -55,4 +63,4 @@
 
 -----------------
 
-Updated: 2016 Jun 08
+Updated: 2016 Jun 09
