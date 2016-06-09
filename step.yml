@@ -50,17 +50,18 @@ inputs:
         actual available options depend on which versions
         are installed):
         * iPhone 6
-        * iPhone 6 Plus
+        * iPhone 6s Plus
         * iPad
         * iPad Air
       is_required: true
-  - simulator_os_version: iOS 9.3
+  - simulator_os_version: latest
     opts:
       title: "OS version"
       description: |
         A couple of format examples:
         * iOS 8.4
         * iOS 9.3
+        * latest
 outputs:
 - BITRISE_XAMARIN_TEST_RESULT:
   opts:
