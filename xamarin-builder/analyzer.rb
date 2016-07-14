@@ -28,12 +28,18 @@ REGEX_SOLUTION_GLOBAL_CONFIG_END = /EndGlobalSection/i
 
 #
 # Project regex
+REGEX_PROJECT_TARGET_DEFINITION = /import project=\"(?<target_definition>.*\.targets)\"/i
 REGEX_PROJECT_GUID = /<ProjectGuid>(?<project_id>.*)<\/ProjectGuid>/i
 REGEX_PROJECT_TYPE_GUIDS = /<ProjectTypeGuids>(?<project_type_guids>.*)<\/ProjectTypeGuids>/i
 REGEX_PROJECT_OUTPUT_TYPE = /<OutputType>(?<output_type>.*)<\/OutputType>/i
 REGEX_PROJECT_ASSEMBLY_NAME = /<AssemblyName>(?<assembly_name>.*)<\/AssemblyName>/i
-REGEX_PROJECT_PROPERTY_GROUP_WITH_CONDITION = /<PropertyGroup Condition=\"\s*'\$\(Configuration\)\|\$\(Platform\)'\s*==\s*'(?<config>.*)\|(?<platform>.*)'\s*\">/i
+
+REGEX_PROJECT_PROPERTY_GROUP = /<PropertyGroup>/i
+REGEX_PROJECT_PROPERTY_GROUP_WITH_CONDITION_WITH_CONFIGURATION_AND_PLATFORM = /<PropertyGroup Condition=\"\s*'\$\(Configuration\)\|\$\(Platform\)'\s*==\s*'(?<config>.*)\|(?<platform>.*)'\s*\">/i
+REGEX_PROJECT_PROPERTY_GROUP_WITH_CONDITION_WITH_CONFIGURATION = /<PropertyGroup Condition=\"\s*'\$\(Configuration\)'\s*==\s*'(?<config>.*)'\s*\">/i
+REGEX_PROJECT_PROPERTY_GROUP_WITH_CONDITION_WITH_PLATFORM= /<PropertyGroup Condition=\"\s*'\$\(Platform\)'\s*==\s*'(?<platform>.*)'\s*\">/i
 REGEX_PROJECT_PROPERTY_GROUP_END = /<\/PropertyGroup>/i
+
 REGEX_PROJECT_OUTPUT_PATH = /<OutputPath>(?<output_path>.*)<\/OutputPath>/i
 REGEX_PROJECT_PROJECT_REFERENCE_START = /<ProjectReference Include="(?<project_path>.*)">/i
 REGEX_PROJECT_PROJECT_REFERENCE_END = /<\/ProjectReference>/i
@@ -64,15 +70,36 @@ REGEX_PROJECT_REFERENCE_NUNIT_LITE_FRAMEWORK = /Include="MonoTouch.NUnitLite/i
 REGEX_ARCHIVE_DATE_TIME = /\s(.*[AM]|[PM]).*\./i
 
 class Analyzer
-  @project_type_guids = {
-    ios: "FEACFBD2-3405-455C-9665-78FE426C6842",
-    mac: "A3F8F2AB-B479-4A4A-A458-A89E7DC349F1",
-    tvos: "06FA79CB-D6CD-4721-BB4B-1BD202089C55",
-    android: "EFBA0AD7-5A72-4C68-AF49-83D382785DCF"
+  # references:
+  # https://github.com/mono/monodevelop/blob/master/main/src/core/MonoDevelop.Core/MonoDevelop.Core.addin.xml#L299
+  @project_type_guid_map = {
+    'Xamarin.iOS' => [
+      'E613F3A2-FE9C-494F-B74E-F63BCB86FEA6',
+      '6BC8ED88-2882-458C-8E55-DFD12B67127B',
+      'F5B4F3BC-B597-4E2B-B552-EF5D8A32436F',
+      'FEACFBD2-3405-455C-9665-78FE426C6842',
+      '8FFB629D-F513-41CE-95D2-7ECE97B6EEEC',
+      'EE2C853D-36AF-4FDB-B1AD-8E90477E2198'
+    ],
+    'Xamarin.Android' => [
+      'EFBA0AD7-5A72-4C68-AF49-83D382785DCF',
+      '10368E6C-D01B-4462-8E8B-01FC667A7035'
+    ],
+    'MonoMac' => [
+      '1C533B1C-72DD-4CB1-9F6B-BF11D93BCFBE',
+      '948B3504-5B70-4649-8FE4-BDE1FB46EC69'
+    ],
+    'Xamarin.Mac' => [
+      '42C0BBD9-55CE-4FC1-8D90-A7348ABAFB23',
+      'A3F8F2AB-B479-4A4A-A458-A89E7DC349F1'
+    ],
+    'Xamarin.tvOS' => [
+      '06FA79CB-D6CD-4721-BB4B-1BD202089C55'
+    ]
   }
 
   class << self
-    attr_accessor :project_type_guids
+    attr_accessor :project_type_guid_map
   end
 
   def analyze(path)
@@ -190,6 +217,13 @@ class Analyzer
       # Checked referenced projects if it includes
       # the correct project type [iOS|Android]
       referred_projects = []
+
+      unless project[:referred_project_ids]
+        errors << "no referred projects found for #{test_project}"
+        errors << project.to_s
+        next
+      end
+
       project[:referred_project_ids].each do |id|
         referred_project = project_with_id(id)
 
@@ -368,6 +402,43 @@ class Analyzer
     outputs_hash
   end
 
+  def ios_project_type?(guid)
+    ios_guids = Analyzer.project_type_guid_map['Xamarin.iOS']
+    ios_guids.include? guid
+  end
+
+  def android_project_type?(guid)
+    android_guids = Analyzer.project_type_guid_map['Xamarin.Android']
+    android_guids.include? guid
+  end
+
+  def mac_project_type?(guid)
+    mac_guids = Analyzer.project_type_guid_map['MonoMac'].concat Analyzer.project_type_guid_map['Xamarin.Mac']
+    mac_guids.include? guid
+  end
+
+  def tv_project_type?(guid)
+    tv_guids = Analyzer.project_type_guid_map['Xamarin.tvOS']
+    tv_guids.include? guid
+  end
+
+  def identify_project_api(project_type_guids_str)
+    project_type_guids = project_type_guids_str.split(';')
+
+    project_type_guids.each do |project_type_guid|
+      project_type_guid = project_type_guid.strip
+      project_type_guid = project_type_guid.tr('{', '')
+      project_type_guid = project_type_guid.tr('}', '')
+
+      return Api::IOS if ios_project_type?(project_type_guid)
+      return Api::ANDROID if android_project_type?(project_type_guid)
+      return Api::MAC if mac_project_type?(project_type_guid)
+      return Api::TVOS if tv_project_type?(project_type_guid)
+    end
+
+    Api::UNKNOWN
+  end
+
   private
 
   def android_package_name(manifest_path)
@@ -441,25 +512,61 @@ class Analyzer
           solution_platform = match.captures[2].strip
           project_configuration = match.captures[3].strip
           project_platform = match.captures[4].strip
-          project_platform = "AnyCPU" if project_platform.eql? 'Any CPU' # Fix MS bug
+          project_platform = 'AnyCPU' if project_platform.eql? 'Any CPU' # Fix MS bug
 
           project = project_with_id(project_id)
           next unless project
 
           (project[:mappings] ||= {})["#{solution_configuration}|#{solution_platform}"] = "#{project_configuration}|#{project_platform}"
+          (project[:configs] ||= {})["#{project_configuration}|#{project_platform}"] = {}
         end
       end
 
       match = line.match(REGEX_SOLUTION_GLOBAL_PROJECT_CONFIG_START)
       parse_project_configs = true if match != nil
     end
+
+    # Remove projects without any mapping or config
+    valid_projects = []
+    @solution[:projects].each do |project|
+      has_mapping = (project[:mappings] && project[:mappings].length)
+      has_config = (project[:configs] && project[:configs].length)
+
+      puts "project #{project} is referred in solution, but does not contains any mapping" unless has_mapping
+      puts "project #{project} is referred in solution, but does not contains any config" unless has_config
+
+      valid_projects << project if has_mapping && has_config
+    end
+
+    @solution[:projects] = valid_projects
   end
 
   def analyze_project(project)
-    project_config = nil
+    file = File.open(project[:path])
+    analyze_project_definition(project, file)
+  end
+
+  def analyze_project_definition(project, file)
+    project_configs = []
     referred_project_paths = nil
 
-    File.open(project[:path]).each do |line|
+    file.each do |line|
+      # Target definition
+      match = line.match(REGEX_PROJECT_TARGET_DEFINITION)
+      if match != nil && match.captures != nil && match.captures.count == 1
+        relative_path = match.captures[0]
+
+        unless relative_path.include? "$(MSBuild"
+          project_dir = File.dirname(project[:path])
+          definition_path = File.expand_path(File.join([project_dir].concat(match.captures[0].split('\\'))))
+
+          if File.exist?(definition_path)
+            definition_file = File.open(definition_path)
+            analyze_project_definition(project, definition_file)
+          end
+        end
+      end
+
       # Guid
       match = line.match(REGEX_PROJECT_GUID)
       if match != nil && match.captures != nil && match.captures.count == 1
@@ -501,36 +608,91 @@ class Analyzer
 
       # PropertyGroup with condition
       match = line.match(REGEX_PROJECT_PROPERTY_GROUP_END)
-      project_config = nil if match
+      project_configs = [] if match
 
-      if project_config != nil
+      unless project_configs.empty?
         match = line.match(REGEX_PROJECT_OUTPUT_PATH)
         if match != nil && match.captures != nil && match.captures.count == 1
-          project[:configs][project_config][:output_path] = File.join(match.captures[0].split('\\'))
+          project_configs.each do |project_config|
+            configuration, platform = project_config.split('|')
+            output_path = match.captures[0]
+            output_path.sub!("$(Configuration)", configuration)
+            output_path.sub!("$(Platform)", platform)
+
+            project[:configs][project_config][:output_path] = File.join(output_path.split('\\'))
+          end
         end
 
         match = line.match(REGEX_PROJECT_MTOUCH_ARCH)
         if match != nil && match.captures != nil && match.captures.count == 1
-          project[:configs][project_config][:mtouch_arch] = match.captures[0].split(',').collect { |x| x.strip || x }
+          project_configs.each do |project_config|
+            project[:configs][project_config][:mtouch_arch] = match.captures[0].split(',').collect { |x| x.strip || x }
+          end
         end
 
         match = line.match(REGEX_PROJECT_SIGN_ANDROID)
-        project[:configs][project_config][:sign_android] = true if match != nil
+        if match != nil
+          project_configs.each do |project_config|
+            project[:configs][project_config][:sign_android] = true
+          end
+        end
 
         match = line.match(REGEX_PROJECT_IPA_PACKAGE)
-        project[:configs][project_config][:ipa_package] = true if match != nil
+        if match != nil
+          project_configs.each do |project_config|
+            project[:configs][project_config][:ipa_package] = true
+          end
+        end
 
         match = line.match(REGEX_PROJECT_BUILD_IPA)
-        project[:configs][project_config][:build_ipa] = true if match != nil
+        if match != nil
+          project_configs.each do |project_config|
+            project[:configs][project_config][:build_ipa] = true if match != nil
+          end
+        end
       end
 
-      match = line.match(REGEX_PROJECT_PROPERTY_GROUP_WITH_CONDITION)
+      match = line.match(REGEX_PROJECT_PROPERTY_GROUP)
+      if match != nil && project[:configs] != nil
+        project_configs = []
+        project[:configs].each do |project_config,value|
+          project[:configs][project_config] ||= {}
+          project_configs << project_config
+        end
+      end
+
+      match = line.match(REGEX_PROJECT_PROPERTY_GROUP_WITH_CONDITION_WITH_CONFIGURATION_AND_PLATFORM)
       if match != nil && match.captures != nil && match.captures.count == 2
         configuration = match.captures[0].strip
         platform = match.captures[1].strip
         project_config = "#{configuration}|#{platform}"
 
-        (project[:configs] ||= {})[project_config] = {}
+        project[:configs][project_config] ||= {}
+        project_configs = [project_config]
+      end
+
+      match = line.match(REGEX_PROJECT_PROPERTY_GROUP_WITH_CONDITION_WITH_CONFIGURATION)
+      if match != nil && match.captures != nil && match.captures.count == 1
+        configuration = match.captures[0].strip
+        project_config_filter = "#{configuration}|"
+
+        project_configs = []
+        project[:configs].each do |project_config,value|
+          project[:configs][project_config] ||= {}
+          project_configs << project_config if project_config.include?(project_config_filter)
+        end
+      end
+
+      match = line.match(REGEX_PROJECT_PROPERTY_GROUP_WITH_CONDITION_WITH_PLATFORM)
+      if match != nil && match.captures != nil && match.captures.count == 1
+        platform = match.captures[0].strip
+        project_config_filter = "|#{platform}"
+
+        project_configs = []
+        project[:configs].each do |project_config,value|
+          project[:configs][project_config] ||= {}
+          project_configs << project_config if project_config.include?(project_config_filter)
+        end
       end
 
       # API
@@ -573,7 +735,7 @@ class Analyzer
 
   def mdtool_configuration(project_configuration)
     config, platform = project_configuration.split('|')
-    (mdtool_config ||= [] ) << config
+    (mdtool_config ||= []) << config
 
     if !platform.eql?("AnyCPU") && !platform.eql?("Any CPU")
       mdtool_config << platform
@@ -623,7 +785,7 @@ class Analyzer
     latest_archive = nil
     latest_archive_date = nil
 
-    archives = Dir[File.join(default_archives_path, "**/#{project_name}*.xcarchive")]
+    archives = Dir[File.join(default_archives_path, "**/#{project_name} *.xcarchive")]
     archives.each do |archive_path|
       match = archive_path.match(REGEX_ARCHIVE_DATE_TIME)
 
@@ -638,17 +800,5 @@ class Analyzer
     end
 
     latest_archive
-  end
-
-  def identify_project_api(project_type_guids)
-    if project_type_guids.include? Analyzer.project_type_guids[:ios]
-      Api::IOS
-    elsif project_type_guids.include? Analyzer.project_type_guids[:android]
-      Api::ANDROID
-    elsif project_type_guids.include? Analyzer.project_type_guids[:mac]
-      Api::MAC
-    elsif project_type_guids.include? Analyzer.project_type_guids[:tvos]
-      Api::TVOS
-    end
   end
 end

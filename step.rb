@@ -54,7 +54,6 @@ end
 def compare_versions(version_str_1,version_str_2)
   v1 = version_str_1.split('.').collect(&:to_i)
   v2 = version_str_2.split('.').collect(&:to_i)
-  puts "compare: #{version_str_1} <> #{version_str_2}"
 
   # pad with zeroes so they're the same length
   v1.push(0) while v1.length < v2.length
@@ -63,7 +62,6 @@ def compare_versions(version_str_1,version_str_2)
   pairs = v1.zip(v2)
   pairs.each do |pair|
     diff = pair[0] - pair[1]
-    puts "pair: #{pair} - diff: #{diff}"
     return 1 if diff > 0
     return -1 if diff < 0
   end
@@ -189,15 +187,14 @@ puts_details "* simulator_UDID: #{udid}"
 
 #
 # Main
-nunit_path = ENV['NUNIT_2_PATH']
-puts_fail('No NUNIT_2_PATH environment specified') unless nunit_path
+nunit_path = ENV['NUNIT_3_PATH']
+puts_fail('No NUNIT_3_PATH environment specified') unless nunit_path
 
-nunit_console_path = File.join(nunit_path, 'nunit-console.exe')
-puts_fail('nunit-console.exe not found') unless File.exist?(nunit_console_path)
+nunit_console_path = File.join(nunit_path, 'nunit3-console.exe')
+puts_fail('nunit3-console.exe not found') unless File.exist?(nunit_console_path)
 
-builder = Builder.new(options[:project], options[:configuration], options[:platform],[Api::IOS])
+builder = Builder.new(options[:project], options[:configuration], options[:platform], [Api::IOS])
 begin
-  builder.build
   builder.build_test
 rescue => ex
   puts_error(ex.inspect.to_s)
@@ -231,7 +228,7 @@ output.each do |_, project_output|
       nunit_console_path,
       dll_path
     ]
-    params << "run=\"#{options[:test_to_run]}\"" unless options[:test_to_run].nil?
+    params << "--test=\"#{options[:test_to_run]}\"" unless options[:test_to_run].nil?
 
     command = params.join(' ')
 
@@ -281,7 +278,7 @@ output.each do |_, project_output|
   system('envman add --key BITRISE_XAMARIN_TEST_RESULT --value succeeded')
   puts_done 'UITests finished with success'
 
-  system("envman add --key BITRISE_XAMARIN_TEST_FULL_RESULTS_TEXT --value #{@result_log_path}") if @result_log_path
+  system("envman add --key BITRISE_XAMARIN_TEST_FULL_RESULTS_TEXT --value \"#{@result_log_path}\"") if @result_log_path
   puts_details "Logs are available at: #{@result_log_path}"
 end
 
