@@ -9,6 +9,8 @@ class Builder
     raise 'No configuration provided' if configuration.to_s == ''
     raise 'No platform provided' if platform.to_s == ''
 
+    raise 'project_type_filter should be an Array of Strings' if project_type_filter && !project_type_filter.is_a?(Array)
+
     @path = path
     @configuration = configuration
     @platform = platform

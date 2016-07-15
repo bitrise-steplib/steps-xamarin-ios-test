@@ -1,8 +1,9 @@
 module Api
   IOS = 'ios'.freeze # Xamarin.iOS projects
+  ANDROID = 'android'.freeze # Xamarin.Android projects
   MAC = 'mac'.freeze # Xamarin.Mac projects
   TVOS = 'tvos'.freeze # Xamarin.TVOS projects
-  ANDROID = 'android'.freeze # Xamarin.Android projects
+  UNKNOWN = 'unkown'.freeze # unknown projects
 end
 
 module Tests
