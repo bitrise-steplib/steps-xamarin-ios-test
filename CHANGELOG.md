@@ -1,6 +1,12 @@
-## Changelog (Current version: 1.0.2)
+## Changelog (Current version: 1.0.3)
 
 -----------------
+
+### 1.0.3 (2016 Jul 15)
+
+* [cc11134] prepare for 1.0.3
+* [b06be84] Merge pull request #24 from bitrise-steplib/nunit_3
+* [7adc990] run nunit 3
 
 ### 1.0.2 (2016 Jun 09)
 
@@ -63,4 +69,4 @@
 
 -----------------
 
-Updated: 2016 Jun 09
+Updated: 2016 Jul 15
