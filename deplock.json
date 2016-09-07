@@ -2,7 +2,7 @@
 	"dep_locks": [
 		{
 			"url": "https://github.com/bitrise-io/xamarin-builder.git",
-			"revision": "dbaab4eeb6f51b3f9e17daae1f40e748638ceebc"
+			"revision": "2c507012fd1e82b384d55b330f07d3de334b4762"
 		}
 	]
 }
