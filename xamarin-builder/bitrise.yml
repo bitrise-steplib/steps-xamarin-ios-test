@@ -3,6 +3,7 @@ default_step_lib_source: https://github.com/bitrise-io/bitrise-steplib.git
 
 app:
   envs:
+  - RELEASE_VERSION: 0.9.4
   - XAMARIN_BUILDER_TEST_APP_URI: https://github.com/bitrise-io/xamarin-builder-test-app.git
 
 workflows:
@@ -29,22 +30,6 @@ workflows:
   # ----------------------------------------------------------------
   # --- workflows to create Release
   create-release:
-    steps:
-    - script:
-        title:
-        inputs:
-        - content: |
-            #!/bin/bash
-            set -e
-
-            export CI=true
-            releaseman create \
-              --bump-version patch \
-              --set-version-script "echo $RELEASE_VERSION >> version"
-
-  create-release-version:
-    envs:
-    - RELEASE_VERSION: 0.9.0
     steps:
     - script:
         title:
