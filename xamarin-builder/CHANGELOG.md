@@ -1,6 +1,12 @@
-## Changelog (Current version: 0.9.3)
+## Changelog (Current version: 0.9.4)
 
 -----------------
+
+### 0.9.4 (2016 Sep 07)
+
+* [6c7becb] Merge branch 'master' of github.com:bitrise-io/xamarin-builder
+* [9b04e92] prepare for 0.9.4
+* [5ed3cc9] retry test commands (#41)
 
 ### 0.9.3 (2016 Aug 25)
 
@@ -21,4 +27,4 @@
 
 -----------------
 
-Updated: 2016 Aug 25
+Updated: 2016 Sep 07

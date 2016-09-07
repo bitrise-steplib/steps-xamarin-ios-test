@@ -3,7 +3,7 @@ default_step_lib_source: https://github.com/bitrise-io/bitrise-steplib.git
 
 app:
   envs:
-  - RELEASE_VERSION: 0.9.3
+  - RELEASE_VERSION: 0.9.4
   - XAMARIN_BUILDER_TEST_APP_URI: https://github.com/bitrise-io/xamarin-builder-test-app.git
 
 workflows:

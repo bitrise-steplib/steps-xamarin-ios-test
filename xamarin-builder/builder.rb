@@ -65,9 +65,9 @@ class Builder
     end
 
     return_value = nil
+
     Open3.popen3(mdtool_build_command.join(' ')) do |_, stdout, _, wait_thr|
       pid = wait_thr.pid
-      return_value = wait_thr.value
 
       stdout.each do |line|
         puts line
@@ -75,6 +75,8 @@ class Builder
         timer.stop if timer.running?
         timer.start if line.include? 'Loading projects'
       end
+
+      return_value = wait_thr.value
     end
 
     force_timer.stop
@@ -213,8 +215,7 @@ class Builder
 
     app_file = nil
     test_commands.each do |test_command|
-      command = test_command.join(' ')
-      command.sub! '--launchsim', "--launchsim #{app_file}" if command.include? touch_unit_server and !app_file.nil?
+      test_command.collect! { |element| (element == '--launchsim') ? "--launchsim #{app_file}" : element } if test_command.include?("\"#{touch_unit_server}\"") && !app_file.nil?
 
       if ([MDTOOL_PATH, 'build', 'archive'] & test_command).any?
         puts
@@ -222,20 +223,20 @@ class Builder
         puts "\e[34m#{test_command}\e[0m"
         puts
 
-        raise 'Test failed' unless run_mdtool_in_diagnostic_mode(command, retry_on_hang)
+        raise 'Test failed' unless run_mdtool_in_diagnostic_mode(test_command, retry_on_hang)
       else
         puts
         puts "\e[34m#{test_command}\e[0m"
         puts
 
-        raise 'Test failed' unless system(command)
+        raise 'Test failed' unless system(test_command.join(' '))
       end
 
-      if command.include? 'mdtool'
-        @generated_files = @analyzer.collect_generated_files(@configuration, @platform, @project_type_filter)
-        @generated_files.each do |_, project_output|
-          app_file = project_output[:app] if project_output[:api] == Api::IOS and project_output[:app]
-        end
+      next unless test_command.include? MDTOOL_PATH
+
+      @generated_files = @analyzer.collect_generated_files(@configuration, @platform, @project_type_filter)
+      @generated_files.each do |_, project_output|
+        app_file = project_output[:app] if project_output[:api] == Api::IOS && project_output[:app]
       end
     end
 
