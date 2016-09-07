@@ -1,6 +1,11 @@
-## Changelog (Current version: 1.0.3)
+## Changelog (Current version: 1.0.4)
 
 -----------------
+
+### 1.0.4 (2016 Sep 07)
+
+* [811636b] prepare for 1.0.4
+* [fef149d] Builder update (#25)
 
 ### 1.0.3 (2016 Jul 15)
 
@@ -69,4 +74,4 @@
 
 -----------------
 
-Updated: 2016 Jul 15
+Updated: 2016 Sep 07
