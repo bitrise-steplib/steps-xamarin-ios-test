@@ -1,6 +1,12 @@
-## Changelog (Current version: 1.0.4)
+## Changelog (Current version: 2.0.0)
 
 -----------------
+
+### 2.0.0 (2016 Oct 19)
+
+* [e0434fc] gitignore _tmp/
+* [1d787f4] prepare for 2.0.0
+* [cce42e8] Go xamarin (#26)
 
 ### 1.0.4 (2016 Sep 07)
 
@@ -74,4 +80,4 @@
 
 -----------------
 
-Updated: 2016 Sep 07
+Updated: 2016 Oct 19
