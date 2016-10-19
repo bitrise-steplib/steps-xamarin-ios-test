@@ -397,30 +397,35 @@ func (builder Model) CollectProjectOutputs(configuration, platform string) (Proj
 
 		switch proj.ProjectType {
 		case constants.ProjectTypeIOS, constants.ProjectTypeTvOS:
-			if xcarchivePth, err := exportLatestXCArchiveFromXcodeArchives(proj.AssemblyName); err != nil {
-				return ProjectOutputMap{}, err
-			} else if xcarchivePth != "" {
-				projectOutputs.Outputs = append(projectOutputs.Outputs, OutputModel{
-					Pth:        xcarchivePth,
-					OutputType: constants.OutputTypeXCArchive,
-				})
+			if isArchitectureArchiveable(projectConfig.MtouchArchs...) {
+				if xcarchivePth, err := exportLatestXCArchiveFromXcodeArchives(proj.AssemblyName); err != nil {
+					return ProjectOutputMap{}, err
+				} else if xcarchivePth != "" {
+					projectOutputs.Outputs = append(projectOutputs.Outputs, OutputModel{
+						Pth:        xcarchivePth,
+						OutputType: constants.OutputTypeXCArchive,
+					})
+				}
+
+				if ipaPth, err := exportLatestIpa(projectConfig.OutputDir, proj.AssemblyName); err != nil {
+					return ProjectOutputMap{}, err
+				} else if ipaPth != "" {
+					projectOutputs.Outputs = append(projectOutputs.Outputs, OutputModel{
+						Pth:        ipaPth,
+						OutputType: constants.OutputTypeIPA,
+					})
+				}
+
+				if dsymPth, err := exportAppDSYM(projectConfig.OutputDir, proj.AssemblyName); err != nil {
+					return ProjectOutputMap{}, err
+				} else if dsymPth != "" {
+					projectOutputs.Outputs = append(projectOutputs.Outputs, OutputModel{
+						Pth:        dsymPth,
+						OutputType: constants.OutputTypeDSYM,
+					})
+				}
 			}
-			if ipaPth, err := exportLatestIpa(projectConfig.OutputDir, proj.AssemblyName); err != nil {
-				return ProjectOutputMap{}, err
-			} else if ipaPth != "" {
-				projectOutputs.Outputs = append(projectOutputs.Outputs, OutputModel{
-					Pth:        ipaPth,
-					OutputType: constants.OutputTypeIPA,
-				})
-			}
-			if dsymPth, err := exportAppDSYM(projectConfig.OutputDir, proj.AssemblyName); err != nil {
-				return ProjectOutputMap{}, err
-			} else if dsymPth != "" {
-				projectOutputs.Outputs = append(projectOutputs.Outputs, OutputModel{
-					Pth:        dsymPth,
-					OutputType: constants.OutputTypeDSYM,
-				})
-			}
+
 			if appPth, err := exportApp(projectConfig.OutputDir, proj.AssemblyName); err != nil {
 				return ProjectOutputMap{}, err
 			} else if appPth != "" {
