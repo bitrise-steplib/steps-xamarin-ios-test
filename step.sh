@@ -1,13 +1,15 @@
 #!/bin/bash
+set -ex
+THIS_SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
-THIS_SCRIPTDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+tmp_gopath_dir="$(mktemp -d)"
 
-set -e
+go_package_name="github.com/bitrise-steplib/steps-xamarin-ios-test"
+full_package_path="${tmp_gopath_dir}/src/${go_package_name}"
+mkdir -p "${full_package_path}"
 
-ruby "${THIS_SCRIPTDIR}/step.rb" \
-	-s "${xamarin_project}" \
-	-c "${xamarin_configuration}" \
-	-p "${xamarin_platform}" \
-	-t "${test_to_run}" \
-	-d "${simulator_device}" \
-	-o "${simulator_os_version}"
+rsync -avh --quiet "${THIS_SCRIPT_DIR}/" "${full_package_path}/"
+
+export GOPATH="${tmp_gopath_dir}"
+export GO15VENDOREXPERIMENT=1
+go run "${full_package_path}/main.go"
