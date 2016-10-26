@@ -139,7 +139,7 @@ func analyzeTargetDefinition(project Model, pth string) (Model, error) {
 
 		// ProjectGuid
 		if matches := regexp.MustCompile(guidPattern).FindStringSubmatch(line); len(matches) == 2 {
-			project.ID = matches[1]
+			project.ID = strings.ToUpper(matches[1])
 			continue
 		}
 
@@ -324,7 +324,8 @@ func analyzeTargetDefinition(project Model, pth string) (Model, error) {
 
 		if isProjectReferenceSection {
 			if matches := regexp.MustCompile(referredProjectIDPattern).FindStringSubmatch(line); len(matches) == 2 {
-				project.ReferredProjectIDs = append(project.ReferredProjectIDs, matches[1])
+				referredProjectID := strings.ToUpper(matches[1])
+				project.ReferredProjectIDs = append(project.ReferredProjectIDs, referredProjectID)
 			}
 			continue
 		}

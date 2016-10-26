@@ -129,6 +129,25 @@ Global
 EndGlobal
 `
 
+const macIDTestSolutionContent = `
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 2012
+Project("{fae04ec0-301f-11d3-bf4b-00c04f79efbc}") = "Hello_Mac", "Hello_Mac\Hello_Mac.csproj", "{4da5eac6-6f80-4fec-af81-194210f10b51}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{4da5eac6-6f80-4fec-af81-194210f10b51}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4da5eac6-6f80-4fec-af81-194210f10b51}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4da5eac6-6f80-4fec-af81-194210f10b51}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4da5eac6-6f80-4fec-af81-194210f10b51}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
+`
+
 const tvTestSolutionContent = `
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 2012
