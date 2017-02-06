@@ -1,6 +1,11 @@
-## Changelog (Current version: 2.1.0)
+## Changelog (Current version: 2.1.1)
 
 -----------------
+
+### 2.1.1 (2017 Feb 06)
+
+* [637ea5f] prepare for 2.1.1
+* [8f99207] allow to specify simulator udid (#28)
 
 ### 2.1.0 (2016 Oct 26)
 
@@ -85,4 +90,4 @@
 
 -----------------
 
-Updated: 2016 Oct 26
+Updated: 2017 Feb 06
