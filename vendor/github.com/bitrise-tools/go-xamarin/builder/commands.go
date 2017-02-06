@@ -58,8 +58,8 @@ func (builder Model) buildProjectCommand(configuration, platform string, proj pr
 	// Prepare build commands
 	buildCommands := []tools.Runnable{}
 
-	switch proj.ProjectType {
-	case constants.ProjectTypeIOS, constants.ProjectTypeTvOS:
+	switch proj.SDK {
+	case constants.SDKIOS, constants.SDKTvOS:
 		if builder.forceMDTool {
 			command, err := mdtool.New(builder.solution.Pth)
 			if err != nil {
@@ -103,7 +103,7 @@ func (builder Model) buildProjectCommand(configuration, platform string, proj pr
 
 			buildCommands = append(buildCommands, command)
 		}
-	case constants.ProjectTypeMacOS:
+	case constants.SDKMacOS:
 		if builder.forceMDTool {
 			command, err := mdtool.New(builder.solution.Pth)
 			if err != nil {
@@ -141,7 +141,7 @@ func (builder Model) buildProjectCommand(configuration, platform string, proj pr
 
 			buildCommands = append(buildCommands, command)
 		}
-	case constants.ProjectTypeAndroid:
+	case constants.SDKAndroid:
 		command, err := xbuild.New(builder.solution.Pth, proj.Pth)
 		if err != nil {
 			return []tools.Runnable{}, warnings, err

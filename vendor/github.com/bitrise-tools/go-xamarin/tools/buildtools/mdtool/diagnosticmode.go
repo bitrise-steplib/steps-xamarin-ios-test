@@ -7,12 +7,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/bitrise-io/go-utils/cmdex"
+	"github.com/bitrise-io/go-utils/command"
 	"github.com/bitrise-io/go-utils/log"
 )
 
-func runCommandInDiagnosticMode(command cmdex.CommandModel, checkPattern string, waitTime time.Duration, forceWaitTime time.Duration, retryOnHang bool) error {
-	log.Warn("Run in diagnostic mode")
+func runCommandInDiagnosticMode(command command.Model, checkPattern string, waitTime time.Duration, forceWaitTime time.Duration, retryOnHang bool) error {
+	log.Warnf("Run in diagnostic mode")
 
 	// copy command model to avoid re-run error: Stdout already set
 	cmd := *command.GetCmd()
@@ -24,7 +24,7 @@ func runCommandInDiagnosticMode(command cmdex.CommandModel, checkPattern string,
 	var forceKillTimeoutHandler *time.Timer
 	startForceKillTimeoutHandler := func() {
 		forceKillTimeoutHandler = time.AfterFunc(forceWaitTime, func() {
-			log.Warn("Process QUIT timeout")
+			log.Warnf("Process QUIT timeout")
 
 			forceKillError = cmd.Process.Signal(syscall.SIGKILL)
 		})
@@ -36,7 +36,7 @@ func runCommandInDiagnosticMode(command cmdex.CommandModel, checkPattern string,
 	var killTimeoutHandler *time.Timer
 	startKillTimeoutHandler := func() {
 		killTimeoutHandler = time.AfterFunc(waitTime, func() {
-			log.Warn("Process timed out")
+			log.Warnf("Process timed out")
 
 			timeout = true
 

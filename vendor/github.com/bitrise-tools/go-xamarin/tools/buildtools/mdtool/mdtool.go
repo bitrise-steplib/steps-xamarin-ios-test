@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/bitrise-io/go-utils/cmdex"
+	"github.com/bitrise-io/go-utils/command"
 	"github.com/bitrise-io/go-utils/pathutil"
 	"github.com/bitrise-tools/go-xamarin/constants"
 )
@@ -104,14 +104,14 @@ func (mdtool Model) buildCommandSlice() []string {
 func (mdtool Model) PrintableCommand() string {
 	cmdSlice := mdtool.buildCommandSlice()
 
-	return cmdex.PrintableCommandArgs(true, cmdSlice)
+	return command.PrintableCommandArgs(true, cmdSlice)
 }
 
 // Run ...
 func (mdtool Model) Run() error {
 	cmdSlice := mdtool.buildCommandSlice()
 
-	command, err := cmdex.NewCommandFromSlice(cmdSlice)
+	command, err := command.NewFromSlice(cmdSlice...)
 	if err != nil {
 		return err
 	}

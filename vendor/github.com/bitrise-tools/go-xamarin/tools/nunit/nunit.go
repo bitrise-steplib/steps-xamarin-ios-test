@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/bitrise-io/go-utils/cmdex"
+	"github.com/bitrise-io/go-utils/command"
 	"github.com/bitrise-io/go-utils/pathutil"
 	"github.com/bitrise-tools/go-xamarin/constants"
 )
@@ -121,14 +121,14 @@ func (nunitConsole *Model) commandSlice() []string {
 func (nunitConsole Model) PrintableCommand() string {
 	cmdSlice := nunitConsole.commandSlice()
 
-	return cmdex.PrintableCommandArgs(true, cmdSlice)
+	return command.PrintableCommandArgs(true, cmdSlice)
 }
 
 // Run ...
 func (nunitConsole Model) Run() error {
 	cmdSlice := nunitConsole.commandSlice()
 
-	command, err := cmdex.NewCommandFromSlice(cmdSlice)
+	command, err := command.NewFromSlice(cmdSlice...)
 	if err != nil {
 		return err
 	}

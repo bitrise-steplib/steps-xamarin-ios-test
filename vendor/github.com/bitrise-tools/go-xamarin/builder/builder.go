@@ -18,7 +18,7 @@ import (
 type Model struct {
 	solution solution.Model
 
-	projectTypeWhitelist []constants.ProjectType
+	projectTypeWhitelist []constants.SDK
 	forceMDTool          bool
 }
 
@@ -30,7 +30,7 @@ type OutputModel struct {
 
 // ProjectOutputModel ...
 type ProjectOutputModel struct {
-	ProjectType constants.ProjectType
+	ProjectType constants.SDK
 	Outputs     []OutputModel
 }
 
@@ -39,7 +39,7 @@ type ProjectOutputMap map[string]ProjectOutputModel // Project Name - ProjectOut
 
 // TestProjectOutputModel ...
 type TestProjectOutputModel struct {
-	ProjectType          constants.ProjectType
+	TestFramwork         constants.TestFramework
 	ReferredProjectNames []string
 	Output               OutputModel
 }
@@ -48,16 +48,16 @@ type TestProjectOutputModel struct {
 type TestProjectOutputMap map[string]TestProjectOutputModel // Test Project Name - TestProjectOutputModel
 
 // PrepareCommandCallback ...
-type PrepareCommandCallback func(solutionName string, projectName string, projectType constants.ProjectType, command *tools.Editable)
+type PrepareCommandCallback func(solutionName string, projectName string, sdk constants.SDK, testFramework constants.TestFramework, command *tools.Editable)
 
 // BuildCommandCallback ...
-type BuildCommandCallback func(solutionName string, projectName string, projectType constants.ProjectType, commandStr string, alreadyPerformed bool)
+type BuildCommandCallback func(solutionName string, projectName string, sdk constants.SDK, testFramework constants.TestFramework, commandStr string, alreadyPerformed bool)
 
 // ClearCommandCallback ...
 type ClearCommandCallback func(project project.Model, dir string)
 
 // New ...
-func New(solutionPth string, projectTypeWhitelist []constants.ProjectType, forceMDTool bool) (Model, error) {
+func New(solutionPth string, projectTypeWhitelist []constants.SDK, forceMDTool bool) (Model, error) {
 	if err := validateSolutionPth(solutionPth); err != nil {
 		return Model{}, err
 	}
@@ -68,7 +68,7 @@ func New(solutionPth string, projectTypeWhitelist []constants.ProjectType, force
 	}
 
 	if projectTypeWhitelist == nil {
-		projectTypeWhitelist = []constants.ProjectType{}
+		projectTypeWhitelist = []constants.SDK{}
 	}
 
 	return Model{
@@ -130,7 +130,7 @@ func (builder Model) BuildSolution(configuration, platform string, callback Buil
 
 	// Callback to notify the caller about next running command
 	if callback != nil {
-		callback(builder.solution.Name, "", constants.ProjectTypeUnknown, buildCommand.PrintableCommand(), true)
+		callback(builder.solution.Name, "", constants.SDKUnknown, constants.TestFrameworkUnknown, buildCommand.PrintableCommand(), true)
 	}
 
 	return buildCommand.Run()
@@ -162,7 +162,7 @@ func (builder Model) BuildAllProjects(configuration, platform string, prepareCal
 			// Callback to let the caller to modify the command
 			if prepareCallback != nil {
 				editabeCommand := tools.Editable(buildCommand)
-				prepareCallback(builder.solution.Name, proj.Name, proj.ProjectType, &editabeCommand)
+				prepareCallback(builder.solution.Name, proj.Name, proj.SDK, proj.TestFramework, &editabeCommand)
 			}
 
 			// Check if same command was already performed
@@ -173,7 +173,7 @@ func (builder Model) BuildAllProjects(configuration, platform string, prepareCal
 
 			// Callback to notify the caller about next running command
 			if callback != nil {
-				callback(builder.solution.Name, proj.Name, proj.ProjectType, buildCommand.PrintableCommand(), alreadyPerformed)
+				callback(builder.solution.Name, proj.Name, proj.SDK, proj.TestFramework, buildCommand.PrintableCommand(), alreadyPerformed)
 			}
 
 			if !alreadyPerformed {
@@ -216,7 +216,7 @@ func (builder Model) BuildAllXamarinUITestAndReferredProjects(configuration, pla
 			// Callback to let the caller to modify the command
 			if prepareCallback != nil {
 				editabeCommand := tools.Editable(buildCommand)
-				prepareCallback(builder.solution.Name, proj.Name, proj.ProjectType, &editabeCommand)
+				prepareCallback(builder.solution.Name, proj.Name, proj.SDK, proj.TestFramework, &editabeCommand)
 			}
 
 			// Check if same command was already performed
@@ -227,7 +227,7 @@ func (builder Model) BuildAllXamarinUITestAndReferredProjects(configuration, pla
 
 			// Callback to notify the caller about next running command
 			if callback != nil {
-				callback(builder.solution.Name, proj.Name, proj.ProjectType, buildCommand.PrintableCommand(), alreadyPerformed)
+				callback(builder.solution.Name, proj.Name, proj.SDK, proj.TestFramework, buildCommand.PrintableCommand(), alreadyPerformed)
 			}
 
 			if !alreadyPerformed {
@@ -252,7 +252,7 @@ func (builder Model) BuildAllXamarinUITestAndReferredProjects(configuration, pla
 		// Callback to let the caller to modify the command
 		if prepareCallback != nil {
 			editabeCommand := tools.Editable(buildCommand)
-			prepareCallback(builder.solution.Name, testProj.Name, testProj.ProjectType, &editabeCommand)
+			prepareCallback(builder.solution.Name, testProj.Name, testProj.SDK, testProj.TestFramework, &editabeCommand)
 		}
 
 		// Check if same command was already performed
@@ -263,7 +263,7 @@ func (builder Model) BuildAllXamarinUITestAndReferredProjects(configuration, pla
 
 		// Callback to notify the caller about next running command
 		if callback != nil {
-			callback(builder.solution.Name, testProj.Name, testProj.ProjectType, buildCommand.PrintableCommand(), alreadyPerformed)
+			callback(builder.solution.Name, testProj.Name, testProj.SDK, testProj.TestFramework, buildCommand.PrintableCommand(), alreadyPerformed)
 		}
 
 		if !alreadyPerformed {
@@ -308,7 +308,7 @@ func (builder Model) BuildAllNunitTestProjects(configuration, platform string, p
 	// Callback to let the caller to modify the command
 	if prepareCallback != nil {
 		editabeCommand := tools.Editable(buildCommand)
-		prepareCallback(builder.solution.Name, "", constants.ProjectTypeUnknown, &editabeCommand)
+		prepareCallback(builder.solution.Name, "", constants.SDKUnknown, constants.TestFrameworkUnknown, &editabeCommand)
 	}
 
 	// Check if same command was already performed
@@ -319,7 +319,7 @@ func (builder Model) BuildAllNunitTestProjects(configuration, platform string, p
 
 	// Callback to notify the caller about next running command
 	if callback != nil {
-		callback(builder.solution.Name, "", constants.ProjectTypeUnknown, buildCommand.PrintableCommand(), alreadyPerformed)
+		callback(builder.solution.Name, "", constants.SDKUnknown, constants.TestFrameworkUnknown, buildCommand.PrintableCommand(), alreadyPerformed)
 	}
 
 	if !alreadyPerformed {
@@ -342,7 +342,7 @@ func (builder Model) BuildAllNunitTestProjects(configuration, platform string, p
 		// Callback to let the caller to modify the command
 		if prepareCallback != nil {
 			editabeCommand := tools.Editable(buildCommand)
-			prepareCallback(builder.solution.Name, testProj.Name, testProj.ProjectType, &editabeCommand)
+			prepareCallback(builder.solution.Name, testProj.Name, testProj.SDK, testProj.TestFramework, &editabeCommand)
 		}
 
 		// Check if same command was already performed
@@ -353,7 +353,7 @@ func (builder Model) BuildAllNunitTestProjects(configuration, platform string, p
 
 		// Callback to notify the caller about next running command
 		if callback != nil {
-			callback(builder.solution.Name, testProj.Name, testProj.ProjectType, buildCommand.PrintableCommand(), alreadyPerformed)
+			callback(builder.solution.Name, testProj.Name, testProj.SDK, testProj.TestFramework, buildCommand.PrintableCommand(), alreadyPerformed)
 		}
 
 		if !alreadyPerformed {
@@ -390,13 +390,13 @@ func (builder Model) CollectProjectOutputs(configuration, platform string) (Proj
 		projectOutputs, ok := projectOutputMap[proj.Name]
 		if !ok {
 			projectOutputs = ProjectOutputModel{
-				ProjectType: proj.ProjectType,
+				ProjectType: proj.SDK,
 				Outputs:     []OutputModel{},
 			}
 		}
 
-		switch proj.ProjectType {
-		case constants.ProjectTypeIOS, constants.ProjectTypeTvOS:
+		switch proj.SDK {
+		case constants.SDKIOS, constants.SDKTvOS:
 			if isArchitectureArchiveable(projectConfig.MtouchArchs...) {
 				if xcarchivePth, err := exportLatestXCArchiveFromXcodeArchives(proj.AssemblyName); err != nil {
 					return ProjectOutputMap{}, err
@@ -434,7 +434,7 @@ func (builder Model) CollectProjectOutputs(configuration, platform string) (Proj
 					OutputType: constants.OutputTypeAPP,
 				})
 			}
-		case constants.ProjectTypeMacOS:
+		case constants.SDKMacOS:
 			if builder.forceMDTool {
 				if xcarchivePth, err := exportLatestXCArchiveFromXcodeArchives(proj.AssemblyName); err != nil {
 					return ProjectOutputMap{}, err
@@ -461,7 +461,7 @@ func (builder Model) CollectProjectOutputs(configuration, platform string) (Proj
 					OutputType: constants.OutputTypePKG,
 				})
 			}
-		case constants.ProjectTypeAndroid:
+		case constants.SDKAndroid:
 			packageName, err := androidPackageName(proj.ManifestPth)
 			if err != nil {
 				return ProjectOutputMap{}, err
@@ -520,7 +520,7 @@ func (builder Model) CollectXamarinUITestProjectOutputs(configuration, platform 
 			}
 
 			testProjectOutputMap[testProj.Name] = TestProjectOutputModel{
-				ProjectType:          testProj.ProjectType,
+				TestFramwork:         testProj.TestFramework,
 				ReferredProjectNames: referredProjectNames,
 				Output: OutputModel{
 					Pth:        dllPth,

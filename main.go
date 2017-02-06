@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/bitrise-io/go-utils/cmdex"
+	"github.com/bitrise-io/go-utils/command"
 	"github.com/bitrise-io/go-utils/fileutil"
 	"github.com/bitrise-io/go-utils/log"
 	"github.com/bitrise-io/go-utils/pathutil"
@@ -39,8 +39,7 @@ func createConfigsModelFromEnvs() ConfigsModel {
 		XamarinConfiguration: os.Getenv("xamarin_configuration"),
 		XamarinPlatform:      os.Getenv("xamarin_platform"),
 
-		TestToRun: os.Getenv("test_to_run"),
-
+		TestToRun:          os.Getenv("test_to_run"),
 		SimulatorDevice:    os.Getenv("simulator_device"),
 		SimulatorOsVersion: os.Getenv("simulator_os_version"),
 
@@ -49,21 +48,21 @@ func createConfigsModelFromEnvs() ConfigsModel {
 }
 
 func (configs ConfigsModel) print() {
-	log.Info("Build Configs:")
+	log.Infof("Build Configs:")
 
-	log.Detail("- XamarinSolution: %s", configs.XamarinSolution)
-	log.Detail("- XamarinConfiguration: %s", configs.XamarinConfiguration)
-	log.Detail("- XamarinPlatform: %s", configs.XamarinPlatform)
+	log.Printf("- XamarinSolution: %s", configs.XamarinSolution)
+	log.Printf("- XamarinConfiguration: %s", configs.XamarinConfiguration)
+	log.Printf("- XamarinPlatform: %s", configs.XamarinPlatform)
 
-	log.Info("Xamarin UITest Configs:")
+	log.Infof("Xamarin UITest Configs:")
 
-	log.Detail("- TestToRun: %s", configs.TestToRun)
-	log.Detail("- SimulatorDevice: %s", configs.SimulatorDevice)
-	log.Detail("- SimulatorOsVersion: %s", configs.SimulatorOsVersion)
+	log.Printf("- TestToRun: %s", configs.TestToRun)
+	log.Printf("- SimulatorDevice: %s", configs.SimulatorDevice)
+	log.Printf("- SimulatorOsVersion: %s", configs.SimulatorOsVersion)
 
-	log.Info("Other Configs:")
+	log.Infof("Other Configs:")
 
-	log.Detail("- DeployDir: %s", configs.DeployDir)
+	log.Printf("- DeployDir: %s", configs.DeployDir)
 }
 
 func (configs ConfigsModel) validate() error {
@@ -91,7 +90,7 @@ func (configs ConfigsModel) validate() error {
 }
 
 func exportEnvironmentWithEnvman(keyStr, valueStr string) error {
-	cmd := cmdex.NewCommand("envman", "add", "--key", keyStr)
+	cmd := command.New("envman", "add", "--key", keyStr)
 	cmd.SetStdin(strings.NewReader(valueStr))
 	return cmd.Run()
 }
@@ -195,10 +194,10 @@ func parseErrorFromResultLog(content string) (string, error) {
 }
 
 func failf(format string, v ...interface{}) {
-	log.Error(format, v...)
+	log.Errorf(format, v...)
 
 	if err := exportEnvironmentWithEnvman("BITRISE_XAMARIN_TEST_RESULT", "failed"); err != nil {
-		log.Warn("Failed to export environment: %s, error: %s", "BITRISE_XAMARIN_TEST_RESULT", err)
+		log.Warnf("Failed to export environment: %s, error: %s", "BITRISE_XAMARIN_TEST_RESULT", err)
 	}
 
 	os.Exit(1)
@@ -216,12 +215,12 @@ func main() {
 
 	// Get Simulator Infos
 	fmt.Println()
-	log.Info("Collecting simulator info...")
+	log.Infof("Collecting simulator info...")
 	simulatorInfo, err := getSimulatorInfo(configs.SimulatorOsVersion, configs.SimulatorDevice)
 	if err != nil {
 		failf("Failed to get simulator infos, error: %s", err)
 	}
-	log.Done("Simulator (%s), id: (%s), status: %s", simulatorInfo.Name, simulatorInfo.ID, simulatorInfo.Status)
+	log.Donef("Simulator (%s), id: (%s), status: %s", simulatorInfo.Name, simulatorInfo.ID, simulatorInfo.Status)
 
 	if err := os.Setenv("IOS_SIMULATOR_UDID", simulatorInfo.ID); err != nil {
 		failf("Failed to export simulator UDID, error: %s", err)
@@ -239,25 +238,25 @@ func main() {
 	//
 	// build
 	fmt.Println()
-	log.Info("Building all iOS Xamarin UITest and Referred Projects in solution: %s", configs.XamarinSolution)
+	log.Infof("Building all iOS Xamarin UITest and Referred Projects in solution: %s", configs.XamarinSolution)
 
-	builder, err := builder.New(configs.XamarinSolution, []constants.ProjectType{constants.ProjectTypeIOS}, false)
+	builder, err := builder.New(configs.XamarinSolution, []constants.SDK{constants.SDKIOS}, false)
 	if err != nil {
 		failf("Failed to create xamarin builder, error: %s", err)
 	}
 
-	callback := func(solutionName string, projectName string, projectType constants.ProjectType, commandStr string, alreadyPerformed bool) {
+	callback := func(solutionName string, projectName string, sdk constants.SDK, testFramework constants.TestFramework, commandStr string, alreadyPerformed bool) {
 		fmt.Println()
-		if projectType == constants.ProjectTypeXamarinUITest {
-			log.Info("Building test project: %s", projectName)
+		if testFramework == constants.TestFrameworkXamarinUITest {
+			log.Infof("Building test project: %s", projectName)
 		} else {
-			log.Info("Building project: %s", projectName)
+			log.Infof("Building project: %s", projectName)
 		}
 
-		log.Done("$ %s", commandStr)
+		log.Donef("$ %s", commandStr)
 
 		if alreadyPerformed {
-			log.Warn("build command already performed, skipping...")
+			log.Warnf("build command already performed, skipping...")
 		}
 
 		fmt.Println()
@@ -265,7 +264,7 @@ func main() {
 
 	warnings, err := builder.BuildAllXamarinUITestAndReferredProjects(configs.XamarinConfiguration, configs.XamarinPlatform, nil, callback)
 	for _, warning := range warnings {
-		log.Warn(warning)
+		log.Warnf(warning)
 	}
 	if err != nil {
 		failf("Build failed, error: %s", err)
@@ -278,7 +277,7 @@ func main() {
 
 	testProjectOutputMap, warnings, err := builder.CollectXamarinUITestProjectOutputs(configs.XamarinConfiguration, configs.XamarinPlatform)
 	for _, warning := range warnings {
-		log.Warn(warning)
+		log.Warnf(warning)
 	}
 	if err != nil {
 		failf("Failed to collect test project output, error: %s", err)
@@ -300,7 +299,7 @@ func main() {
 
 	for testProjectName, testProjectOutput := range testProjectOutputMap {
 		if len(testProjectOutput.ReferredProjectNames) == 0 {
-			log.Warn("Test project (%s) does not refers to any project, skipping...", testProjectName)
+			log.Warnf("Test project (%s) does not refers to any project, skipping...", testProjectName)
 			continue
 		}
 
@@ -329,35 +328,35 @@ func main() {
 
 			// Run test
 			fmt.Println()
-			log.Info("Testing (%s) against (%s)", testProjectName, projectName)
-			log.Detail("test dll: %s", testProjectOutput.Output.Pth)
-			log.Detail("app: %s", appPth)
+			log.Infof("Testing (%s) against (%s)", testProjectName, projectName)
+			log.Printf("test dll: %s", testProjectOutput.Output.Pth)
+			log.Printf("app: %s", appPth)
 
 			nunitConsole.SetDLLPth(testProjectOutput.Output.Pth)
 			nunitConsole.SetTestToRun(configs.TestToRun)
 
 			fmt.Println()
-			log.Info("Running Xamarin UITest")
-			log.Done("$ %s", nunitConsole.PrintableCommand())
+			log.Infof("Running Xamarin UITest")
+			log.Donef("$ %s", nunitConsole.PrintableCommand())
 			fmt.Println()
 
 			err := nunitConsole.Run()
 			testLog, readErr := testResultLogContent(resultLogPth)
 			if readErr != nil {
-				log.Warn("Failed to read test result, error: %s", readErr)
+				log.Warnf("Failed to read test result, error: %s", readErr)
 			}
 			resultLog = testLog
 
 			if err != nil {
 				if errorMsg, err := parseErrorFromResultLog(resultLog); err != nil {
-					log.Warn("Failed to parse error message from result log, error: %s", err)
+					log.Warnf("Failed to parse error message from result log, error: %s", err)
 				} else if errorMsg != "" {
-					log.Error("%s", errorMsg)
+					log.Errorf("%s", errorMsg)
 				}
 
 				if resultLog != "" {
 					if err := exportEnvironmentWithEnvman("BITRISE_XAMARIN_TEST_FULL_RESULTS_TEXT", resultLog); err != nil {
-						log.Warn("Failed to export environment: %s, error: %s", "BITRISE_XAMARIN_TEST_FULL_RESULTS_TEXT", err)
+						log.Warnf("Failed to export environment: %s, error: %s", "BITRISE_XAMARIN_TEST_FULL_RESULTS_TEXT", err)
 					}
 				}
 
@@ -367,12 +366,12 @@ func main() {
 	}
 
 	if err := exportEnvironmentWithEnvman("BITRISE_XAMARIN_TEST_RESULT", "succeeded"); err != nil {
-		log.Warn("Failed to export environment: %s, error: %s", "BITRISE_XAMARIN_TEST_RESULT", err)
+		log.Warnf("Failed to export environment: %s, error: %s", "BITRISE_XAMARIN_TEST_RESULT", err)
 	}
 
 	if resultLog != "" {
 		if err := exportEnvironmentWithEnvman("BITRISE_XAMARIN_TEST_FULL_RESULTS_TEXT", resultLog); err != nil {
-			log.Warn("Failed to export environment: %s, error: %s", "BITRISE_XAMARIN_TEST_FULL_RESULTS_TEXT", err)
+			log.Warnf("Failed to export environment: %s, error: %s", "BITRISE_XAMARIN_TEST_FULL_RESULTS_TEXT", err)
 		}
 	}
 }
