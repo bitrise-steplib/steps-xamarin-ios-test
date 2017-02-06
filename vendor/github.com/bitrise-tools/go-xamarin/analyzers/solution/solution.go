@@ -153,17 +153,18 @@ func analyzeSolution(pth string, analyzeProjects bool) (Model, error) {
 		if isProjectConfigurationPlatformsSection {
 			if matches := regexp.MustCompile(projectConfigurationPlatformPattern).FindStringSubmatch(line); len(matches) == 6 {
 				projectID := strings.ToUpper(matches[1])
+
+				project, found := solution.ProjectMap[projectID]
+				if !found {
+					continue
+				}
+
 				solutionConfiguration := matches[2]
 				solutionPlatform := matches[3]
 				projectConfiguration := matches[4]
 				projectPlatform := matches[5]
 				if projectPlatform == "Any CPU" {
 					projectPlatform = "AnyCPU"
-				}
-
-				project, found := solution.ProjectMap[projectID]
-				if !found {
-					return Model{}, fmt.Errorf("no project found with ID: %s", projectID)
 				}
 
 				project.ConfigMap[utility.ToConfig(solutionConfiguration, solutionPlatform)] = utility.ToConfig(projectConfiguration, projectPlatform)

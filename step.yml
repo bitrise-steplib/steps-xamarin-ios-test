@@ -32,15 +32,15 @@ inputs:
       is_required: true
   - xamarin_configuration: Debug
     opts:
-      title: Xamarin project configuration
+      title: Xamarin solution configuration
       description: |
-        Xamarin project configuration
+        Xamarin solution configuration
       is_required: true
   - xamarin_platform: iPhoneSimulator
     opts:
-      title: Xamarin platform
+      title: Xamarin solution platform
       description: |
-        Xamarin platform
+        Xamarin solution platform
       is_required: true
   - test_to_run:
     opts:

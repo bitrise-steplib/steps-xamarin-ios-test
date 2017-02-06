@@ -12,11 +12,11 @@ func (builder Model) whitelistedProjects() []project.Model {
 	projects := []project.Model{}
 
 	for _, proj := range builder.solution.ProjectMap {
-		if !whitelistAllows(proj.ProjectType, builder.projectTypeWhitelist...) {
+		if !whitelistAllows(proj.SDK, builder.projectTypeWhitelist...) {
 			continue
 		}
 
-		if proj.ProjectType != constants.ProjectTypeUnknown {
+		if proj.SDK != constants.SDKUnknown {
 			projects = append(projects, proj)
 		}
 	}
@@ -37,24 +37,24 @@ func (builder Model) buildableProjects(configuration, platform string) ([]projec
 		// Solution config - project config mapping
 		_, ok := proj.ConfigMap[solutionConfig]
 		if !ok {
-			warnings = append(warnings, fmt.Sprintf("project (%s) do not have config for solution config (%s), skipping...", proj.Name, solutionConfig))
+			warnings = append(warnings, fmt.Sprintf("Project (%s) do not have config for solution config (%s), skipping...", proj.Name, solutionConfig))
 			continue
 		}
 
-		if (proj.ProjectType == constants.ProjectTypeIOS ||
-			proj.ProjectType == constants.ProjectTypeMacOS ||
-			proj.ProjectType == constants.ProjectTypeTvOS) &&
+		if (proj.SDK == constants.SDKIOS ||
+			proj.SDK == constants.SDKMacOS ||
+			proj.SDK == constants.SDKTvOS) &&
 			proj.OutputType != "exe" {
-			warnings = append(warnings, fmt.Sprintf("project (%s) does not archivable based on output type (%s), skipping...", proj.Name, proj.OutputType))
+			warnings = append(warnings, fmt.Sprintf("Project (%s) is not archivable based on output type (%s), skipping...", proj.Name, proj.OutputType))
 			continue
 		}
-		if proj.ProjectType == constants.ProjectTypeAndroid &&
+		if proj.SDK == constants.SDKAndroid &&
 			!proj.AndroidApplication {
 			warnings = append(warnings, fmt.Sprintf("(%s) is not an android application project, skipping...", proj.Name))
 			continue
 		}
 
-		if proj.ProjectType != constants.ProjectTypeUnknown {
+		if proj.SDK != constants.SDKUnknown {
 			projects = append(projects, proj)
 		}
 	}
@@ -72,42 +72,42 @@ func (builder Model) buildableXamarinUITestProjectsAndReferredProjects(configura
 
 	for _, proj := range builder.solution.ProjectMap {
 		// Check if is XamarinUITest project
-		if proj.ProjectType != constants.ProjectTypeXamarinUITest {
+		if proj.TestFramework != constants.TestFrameworkXamarinUITest {
 			continue
 		}
 
 		// Check if contains config mapping
 		_, ok := proj.ConfigMap[solutionConfig]
 		if !ok {
-			warnings = append(warnings, fmt.Sprintf("project (%s) do not have config for solution config (%s), skipping...", proj.Name, solutionConfig))
+			warnings = append(warnings, fmt.Sprintf("Project (%s) do not have config for solution config (%s), skipping...", proj.Name, solutionConfig))
 			continue
 		}
 
 		// Collect referred projects
 		if len(proj.ReferredProjectIDs) == 0 {
-			warnings = append(warnings, fmt.Sprintf("no referred projects found for test project: %s, skipping...", proj.Name))
+			warnings = append(warnings, fmt.Sprintf("No referred projects found for test project: %s, skipping...", proj.Name))
 			continue
 		}
 
 		for _, projectID := range proj.ReferredProjectIDs {
 			referredProj, ok := builder.solution.ProjectMap[projectID]
 			if !ok {
-				warnings = append(warnings, fmt.Sprintf("project reference exist with project id: %s, but project not found in solution", projectID))
+				warnings = append(warnings, fmt.Sprintf("Project reference exist with project id: %s, but project not found in solution", projectID))
 				continue
 			}
 
-			if referredProj.ProjectType == constants.ProjectTypeUnknown {
-				warnings = append(warnings, fmt.Sprintf("project's (%s) project type is unkown", referredProj.Name))
+			if referredProj.SDK == constants.SDKUnknown {
+				warnings = append(warnings, fmt.Sprintf("Project's (%s) project type is unkown", referredProj.Name))
 				continue
 			}
 
-			if whitelistAllows(referredProj.ProjectType, builder.projectTypeWhitelist...) {
+			if whitelistAllows(referredProj.SDK, builder.projectTypeWhitelist...) {
 				referredProjects = append(referredProjects, referredProj)
 			}
 		}
 
 		if len(referredProjects) == 0 {
-			warnings = append(warnings, fmt.Sprintf("test project (%s) does not refers to any project, with project type whitelist (%v), skipping...", proj.Name, builder.projectTypeWhitelist))
+			warnings = append(warnings, fmt.Sprintf("Test project (%s) does not refers to any project, with project type whitelist (%v), skipping...", proj.Name, builder.projectTypeWhitelist))
 			continue
 		}
 
@@ -126,14 +126,14 @@ func (builder Model) buildableNunitTestProjects(configuration, platform string) 
 
 	for _, proj := range builder.solution.ProjectMap {
 		// Check if is nunit test project
-		if proj.ProjectType != constants.ProjectTypeNunitTest {
+		if proj.TestFramework != constants.TestFrameworkNunitTest {
 			continue
 		}
 
 		// Check if contains config mapping
 		_, ok := proj.ConfigMap[solutionConfig]
 		if !ok {
-			warnings = append(warnings, fmt.Sprintf("project (%s) do not have config for solution config (%s), skipping...", proj.Name, solutionConfig))
+			warnings = append(warnings, fmt.Sprintf("Project (%s) do not have config for solution config (%s), skipping...", proj.Name, solutionConfig))
 			continue
 		}
 

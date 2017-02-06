@@ -4,9 +4,11 @@ import (
 	"bufio"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 
-	"github.com/bitrise-io/go-utils/cmdex"
+	"github.com/bitrise-io/go-utils/command"
+	version "github.com/hashicorp/go-version"
 )
 
 // InfoModel ...
@@ -95,11 +97,178 @@ func getOsVersionSimulatorInfosMapFromSimctlList(simctlList string) (OsVersionSi
 
 // GetOsVersionSimulatorInfosMap ...
 func GetOsVersionSimulatorInfosMap() (OsVersionSimulatorInfosMap, error) {
-	cmd := cmdex.NewCommand("xcrun", "simctl", "list")
+	cmd := command.New("xcrun", "simctl", "list")
 	simctlListOut, err := cmd.RunAndReturnTrimmedCombinedOutput()
 	if err != nil {
 		return OsVersionSimulatorInfosMap{}, err
 	}
 
 	return getOsVersionSimulatorInfosMapFromSimctlList(simctlListOut)
+}
+
+func getSimulatorInfoFromSimctlOut(simctlListOut, osNameAndVersion, deviceName string) (InfoModel, error) {
+	osVersionSimulatorInfosMap, err := getOsVersionSimulatorInfosMapFromSimctlList(simctlListOut)
+	if err != nil {
+		return InfoModel{}, err
+	}
+
+	infos, ok := osVersionSimulatorInfosMap[osNameAndVersion]
+	if !ok {
+		return InfoModel{}, fmt.Errorf("no simulators found for os version: %s", osNameAndVersion)
+	}
+
+	for _, info := range infos {
+		if info.Name == deviceName {
+			return info, nil
+		}
+	}
+
+	return InfoModel{}, fmt.Errorf("no simulators found for os version: (%s), device name: (%s)", osNameAndVersion, deviceName)
+}
+
+// GetSimulatorInfo ...
+func GetSimulatorInfo(osNameAndVersion, deviceName string) (InfoModel, error) {
+	cmd := command.New("xcrun", "simctl", "list")
+	simctlListOut, err := cmd.RunAndReturnTrimmedCombinedOutput()
+	if err != nil {
+		return InfoModel{}, err
+	}
+
+	return getSimulatorInfoFromSimctlOut(simctlListOut, osNameAndVersion, deviceName)
+}
+
+func getLatestSimulatorInfoFromSimctlOut(simctlListOut, osName, deviceName string) (InfoModel, string, error) {
+	osVersionSimulatorInfosMap, err := getOsVersionSimulatorInfosMapFromSimctlList(simctlListOut)
+	if err != nil {
+		return InfoModel{}, "", err
+	}
+
+	var latestVersionPtr *version.Version
+	latestInfo := InfoModel{}
+	for osVersion, infos := range osVersionSimulatorInfosMap {
+		if !strings.HasPrefix(osVersion, osName) {
+			continue
+		}
+
+		deviceInfo := InfoModel{}
+		deviceFound := false
+		for _, info := range infos {
+			if info.Name == deviceName {
+				deviceFound = true
+				deviceInfo = info
+				break
+			}
+		}
+		if !deviceFound {
+			continue
+		}
+
+		versionStr := strings.TrimPrefix(osVersion, osName)
+		versionStr = strings.TrimSpace(versionStr)
+
+		versionPtr, err := version.NewVersion(versionStr)
+		if err != nil {
+			return InfoModel{}, "", fmt.Errorf("failed to parse version (%s), error: %s", versionStr, err)
+		}
+
+		if latestVersionPtr == nil || versionPtr.GreaterThan(latestVersionPtr) {
+			latestVersionPtr = versionPtr
+			latestInfo = deviceInfo
+		}
+	}
+
+	if latestVersionPtr == nil {
+		return InfoModel{}, "", fmt.Errorf("failed to determin latest (%s) simulator version", osName)
+	}
+
+	versionSegments := latestVersionPtr.Segments()
+	if len(versionSegments) < 2 {
+		return InfoModel{}, "", fmt.Errorf("invalid version created: %s, segments count < 2", latestVersionPtr.String())
+	}
+
+	osVersion := fmt.Sprintf("%s %d.%d", osName, versionSegments[0], versionSegments[1])
+
+	return latestInfo, osVersion, nil
+}
+
+// GetLatestSimulatorInfoAndVersion ...
+func GetLatestSimulatorInfoAndVersion(osName, deviceName string) (InfoModel, string, error) {
+	cmd := command.New("xcrun", "simctl", "list")
+	simctlListOut, err := cmd.RunAndReturnTrimmedCombinedOutput()
+	if err != nil {
+		return InfoModel{}, "", err
+	}
+
+	return getLatestSimulatorInfoFromSimctlOut(simctlListOut, osName, deviceName)
+}
+
+// Is64BitArchitecture ...
+func Is64BitArchitecture(simulatorDevice string) (bool, error) {
+	// 64 bit processor iPhones:
+	// - iPhone 5S,
+	// - iPhone 6, iPhone 6 Plus, iPhone 6S, iPhone 6S Plus,
+	// - iPhone SE,
+	// - iPhone 7, iPhone 7 Plus
+
+	// 64 bit processor iPads:
+	// - iPad Mini 2, iPad Mini 3, iPad Mini 4
+	// - iPad Air, iPad Air 2
+	// - iPad Pro (12.9 inch), iPad Pro (9.7 inch)
+	deviceSplit := strings.Split(simulatorDevice, " ")
+	if len(deviceSplit) == 1 && deviceSplit[0] == "iPad" {
+		return false, nil
+	}
+
+	if len(deviceSplit) < 2 {
+		return false, fmt.Errorf("Unexpected deivice name (%s)", simulatorDevice)
+	}
+
+	name := strings.TrimSpace(deviceSplit[0])
+	versionSlice := deviceSplit[1:]
+
+	if name == "iPhone" {
+		if versionSlice[0] == "SE" {
+			return true, nil
+		}
+
+		versionNumber := versionSlice[0]
+		if versionNumber == "5S" {
+			return true, nil
+		}
+
+		majorVersionStr := string(versionNumber[0])
+		majorVersion, err := strconv.Atoi(majorVersionStr)
+		if err != nil {
+			return false, err
+		}
+
+		if majorVersion >= 6 {
+			return true, nil
+		}
+	} else if name == "iPad" {
+		subNameOrVersion := strings.TrimSpace(versionSlice[0])
+
+		if subNameOrVersion == "Mini" {
+			if len(versionSlice) == 2 {
+				version, err := strconv.Atoi(versionSlice[1])
+				if err != nil {
+					return false, err
+				}
+
+				if version > 1 {
+					return true, nil
+				}
+			}
+		}
+
+		if subNameOrVersion == "Air" {
+			return true, nil
+		}
+
+		if subNameOrVersion == "Pro" {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }

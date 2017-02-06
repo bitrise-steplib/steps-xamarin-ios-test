@@ -39,27 +39,27 @@ func validateSolutionConfig(solution solution.Model, configuration, platform str
 	return nil
 }
 
-func whitelistAllows(projectType constants.ProjectType, projectTypeWhiteList ...constants.ProjectType) bool {
+func whitelistAllows(projectType constants.SDK, projectTypeWhiteList ...constants.SDK) bool {
 	if len(projectTypeWhiteList) == 0 {
 		return true
 	}
 
 	for _, filter := range projectTypeWhiteList {
 		switch filter {
-		case constants.ProjectTypeIOS:
-			if projectType == constants.ProjectTypeIOS {
+		case constants.SDKIOS:
+			if projectType == constants.SDKIOS {
 				return true
 			}
-		case constants.ProjectTypeTvOS:
-			if projectType == constants.ProjectTypeTvOS {
+		case constants.SDKTvOS:
+			if projectType == constants.SDKTvOS {
 				return true
 			}
-		case constants.ProjectTypeMacOS:
-			if projectType == constants.ProjectTypeMacOS {
+		case constants.SDKMacOS:
+			if projectType == constants.SDKMacOS {
 				return true
 			}
-		case constants.ProjectTypeAndroid:
-			if projectType == constants.ProjectTypeAndroid {
+		case constants.SDKAndroid:
+			if projectType == constants.SDKAndroid {
 				return true
 			}
 		}
@@ -202,8 +202,8 @@ func NewSortableArchivePth(pth string) (SortableArchivePth, error) {
 	archivePth.dirNameDate = dirNameDate
 
 	// File Date & Index
-	// XamarinSampleApp.iOS 10-07-16 3.41 PM 2.xcarchive
-	fileNameDateLayout := "01-02-06 3.04 PM"
+	// XamarinSampleApp.iOS 1-01-17 2.51 AM 2.xcarchive
+	fileNameDateLayout := "1-02-06 3.04 PM"
 	fileNamePattern := `.* (?P<date>[0-9-]+ [0-9.]+ [PM|AM]+)[ ]*(?P<count>|[0-9]+).xcarchive`
 	fileNameRegexp := regexp.MustCompile(fileNamePattern)
 

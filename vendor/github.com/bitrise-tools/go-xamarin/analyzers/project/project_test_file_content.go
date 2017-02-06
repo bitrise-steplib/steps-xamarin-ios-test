@@ -530,7 +530,7 @@ const testIDXamarinUITestProjectContent = `<?xml version="1.0" encoding="utf-8"?
       <HintPath>..\packages\NUnit.2.6.4\lib\nunit.framework.dll</HintPath>
     </Reference>
     <Reference Include="Xamarin.UITest">
-      <HintPath>..\packages\Xamarin.UITest.1.3.8\lib\Xamarin.UITest.dll</HintPath>
+      <HintPath>..\packages\Xamarin.UITest.2.0.0\lib\Xamarin.UITest.dll</HintPath>
     </Reference>
   </ItemGroup>
   <ItemGroup>

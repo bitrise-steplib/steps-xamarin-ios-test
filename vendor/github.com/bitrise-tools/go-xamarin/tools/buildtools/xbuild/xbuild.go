@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/bitrise-io/go-utils/cmdex"
+	"github.com/bitrise-io/go-utils/command"
 	"github.com/bitrise-io/go-utils/pathutil"
 	"github.com/bitrise-tools/go-xamarin/constants"
 )
@@ -123,14 +123,14 @@ func (xbuild Model) buildCommandSlice() []string {
 func (xbuild Model) PrintableCommand() string {
 	cmdSlice := xbuild.buildCommandSlice()
 
-	return cmdex.PrintableCommandArgs(true, cmdSlice)
+	return command.PrintableCommandArgs(true, cmdSlice)
 }
 
 // Run ...
 func (xbuild Model) Run() error {
 	cmdSlice := xbuild.buildCommandSlice()
 
-	command, err := cmdex.NewCommandFromSlice(cmdSlice)
+	command, err := command.NewFromSlice(cmdSlice...)
 	if err != nil {
 		return err
 	}
