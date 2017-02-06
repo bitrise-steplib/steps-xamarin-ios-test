@@ -68,23 +68,23 @@ func (configs ConfigsModel) print() {
 
 func (configs ConfigsModel) validate() error {
 	if configs.XamarinSolution == "" {
-		return errors.New("No XamarinSolution parameter specified!")
+		return errors.New("no XamarinSolution parameter specified")
 	}
 	if exist, err := pathutil.IsPathExists(configs.XamarinSolution); err != nil {
-		return fmt.Errorf("Failed to check if XamarinSolution exist at: %s, error: %s", configs.XamarinSolution, err)
+		return fmt.Errorf("failed to check if XamarinSolution exist at: %s, error: %s", configs.XamarinSolution, err)
 	} else if !exist {
 		return fmt.Errorf("XamarinSolution not exist at: %s", configs.XamarinSolution)
 	}
 
 	if configs.XamarinConfiguration == "" {
-		return errors.New("No XamarinConfiguration parameter specified!")
+		return errors.New("no XamarinConfiguration parameter specified")
 	}
 	if configs.XamarinPlatform == "" {
-		return errors.New("No XamarinPlatform parameter specified!")
+		return errors.New("no XamarinPlatform parameter specified")
 	}
 
 	if configs.SimulatorDevice == "" {
-		return errors.New("No SimulatorDevice parameter specified!")
+		return errors.New("no SimulatorDevice parameter specified")
 	}
 
 	return nil
@@ -194,6 +194,16 @@ func parseErrorFromResultLog(content string) (string, error) {
 	return lastFailureMessage, nil
 }
 
+func failf(format string, v ...interface{}) {
+	log.Error(format, v...)
+
+	if err := exportEnvironmentWithEnvman("BITRISE_XAMARIN_TEST_RESULT", "failed"); err != nil {
+		log.Warn("Failed to export environment: %s, error: %s", "BITRISE_XAMARIN_TEST_RESULT", err)
+	}
+
+	os.Exit(1)
+}
+
 func main() {
 	configs := createConfigsModelFromEnvs()
 
@@ -201,13 +211,7 @@ func main() {
 	configs.print()
 
 	if err := configs.validate(); err != nil {
-		log.Error("Issue with input: %s", err)
-
-		if err := exportEnvironmentWithEnvman("BITRISE_XAMARIN_TEST_RESULT", "failed"); err != nil {
-			log.Warn("Failed to export environment: %s, error: %s", "BITRISE_XAMARIN_TEST_RESULT", err)
-		}
-
-		os.Exit(1)
+		failf("Issue with input: %s", err)
 	}
 
 	// Get Simulator Infos
@@ -215,27 +219,20 @@ func main() {
 	log.Info("Collecting simulator info...")
 	simulatorInfo, err := getSimulatorInfo(configs.SimulatorOsVersion, configs.SimulatorDevice)
 	if err != nil {
-		log.Error("Failed to get simulator infos, error: %s", err)
-
-		if err := exportEnvironmentWithEnvman("BITRISE_XAMARIN_TEST_RESULT", "failed"); err != nil {
-			log.Warn("Failed to export environment: %s, error: %s", "BITRISE_XAMARIN_TEST_RESULT", err)
-		}
-
-		os.Exit(1)
+		failf("Failed to get simulator infos, error: %s", err)
 	}
 	log.Done("Simulator (%s), id: (%s), status: %s", simulatorInfo.Name, simulatorInfo.ID, simulatorInfo.Status)
+
+	if err := os.Setenv("IOS_SIMULATOR_UDID", simulatorInfo.ID); err != nil {
+		failf("Failed to export simulator UDID, error: %s", err)
+	}
+
 	// ---
 
 	// Nunit Console path
 	nunitConsolePth, err := nunit.SystemNunit3ConsolePath()
 	if err != nil {
-		log.Error("Failed to get system insatlled nunit3-console.exe path, error: %s", err)
-
-		if err := exportEnvironmentWithEnvman("BITRISE_XAMARIN_TEST_RESULT", "failed"); err != nil {
-			log.Warn("Failed to export environment: %s, error: %s", "BITRISE_XAMARIN_TEST_RESULT", err)
-		}
-
-		os.Exit(1)
+		failf("Failed to get system insatlled nunit3-console.exe path, error: %s", err)
 	}
 	// ---
 
@@ -246,13 +243,7 @@ func main() {
 
 	builder, err := builder.New(configs.XamarinSolution, []constants.ProjectType{constants.ProjectTypeIOS}, false)
 	if err != nil {
-		log.Error("Failed to create xamarin builder, error: %s", err)
-
-		if err := exportEnvironmentWithEnvman("BITRISE_XAMARIN_TEST_RESULT", "failed"); err != nil {
-			log.Warn("Failed to export environment: %s, error: %s", "BITRISE_XAMARIN_TEST_RESULT", err)
-		}
-
-		os.Exit(1)
+		failf("Failed to create xamarin builder, error: %s", err)
 	}
 
 	callback := func(solutionName string, projectName string, projectType constants.ProjectType, commandStr string, alreadyPerformed bool) {
@@ -277,24 +268,12 @@ func main() {
 		log.Warn(warning)
 	}
 	if err != nil {
-		log.Error("Build failed, error: %s", err)
-
-		if err := exportEnvironmentWithEnvman("BITRISE_XAMARIN_TEST_RESULT", "failed"); err != nil {
-			log.Warn("Failed to export environment: %s, error: %s", "BITRISE_XAMARIN_TEST_RESULT", err)
-		}
-
-		os.Exit(1)
+		failf("Build failed, error: %s", err)
 	}
 
 	projectOutputMap, err := builder.CollectProjectOutputs(configs.XamarinConfiguration, configs.XamarinPlatform)
 	if err != nil {
-		log.Error("Failed to collect project outputs, error: %s", err)
-
-		if err := exportEnvironmentWithEnvman("BITRISE_XAMARIN_TEST_RESULT", "failed"); err != nil {
-			log.Warn("Failed to export environment: %s, error: %s", "BITRISE_XAMARIN_TEST_RESULT", err)
-		}
-
-		os.Exit(1)
+		failf("Failed to collect project outputs, error: %s", err)
 	}
 
 	testProjectOutputMap, warnings, err := builder.CollectXamarinUITestProjectOutputs(configs.XamarinConfiguration, configs.XamarinPlatform)
@@ -302,13 +281,7 @@ func main() {
 		log.Warn(warning)
 	}
 	if err != nil {
-		log.Error("Failed to collect test project output, error: %s", err)
-
-		if err := exportEnvironmentWithEnvman("BITRISE_XAMARIN_TEST_RESULT", "failed"); err != nil {
-			log.Warn("Failed to export environment: %s, error: %s", "BITRISE_XAMARIN_TEST_RESULT", err)
-		}
-
-		os.Exit(1)
+		failf("Failed to collect test project output, error: %s", err)
 	}
 	// ---
 
@@ -316,13 +289,7 @@ func main() {
 	// Run nunit tests
 	nunitConsole, err := nunit.New(nunitConsolePth)
 	if err != nil {
-		log.Error("Failed to create nunit console model, error: %s", err)
-
-		if err := exportEnvironmentWithEnvman("BITRISE_XAMARIN_TEST_RESULT", "failed"); err != nil {
-			log.Warn("Failed to export environment: %s, error: %s", "BITRISE_XAMARIN_TEST_RESULT", err)
-		}
-
-		os.Exit(1)
+		failf("Failed to create nunit console model, error: %s", err)
 	}
 
 	resultLogPth := filepath.Join(configs.DeployDir, "TestResult.xml")
@@ -351,25 +318,13 @@ func main() {
 			}
 
 			if appPth == "" {
-				log.Error("No app generated for project: %s", projectName)
-
-				if err := exportEnvironmentWithEnvman("BITRISE_XAMARIN_TEST_RESULT", "failed"); err != nil {
-					log.Warn("Failed to export environment: %s, error: %s", "BITRISE_XAMARIN_TEST_RESULT", err)
-				}
-
-				os.Exit(1)
+				failf("No app generated for project: %s", projectName)
 			}
 
 			// Set APP_BUNDLE_PATH env to let the test know which .app file should be tested
 			// This env is used in the Xamarin.UITest project to refer to the .app path
 			if err := os.Setenv("APP_BUNDLE_PATH", appPth); err != nil {
-				log.Error("Failed to set APP_BUNDLE_PATH environment, without this env test will fail, error: %s", err)
-
-				if err := exportEnvironmentWithEnvman("BITRISE_XAMARIN_TEST_RESULT", "failed"); err != nil {
-					log.Warn("Failed to export environment: %s, error: %s", "BITRISE_XAMARIN_TEST_RESULT", err)
-				}
-
-				os.Exit(1)
+				failf("Failed to set APP_BUNDLE_PATH environment, without this env test will fail, error: %s", err)
 			}
 
 			// Run test
@@ -394,16 +349,10 @@ func main() {
 			resultLog = testLog
 
 			if err != nil {
-				log.Error("Test failed, error: %s", err)
-
 				if errorMsg, err := parseErrorFromResultLog(resultLog); err != nil {
 					log.Warn("Failed to parse error message from result log, error: %s", err)
 				} else if errorMsg != "" {
 					log.Error("%s", errorMsg)
-				}
-
-				if err := exportEnvironmentWithEnvman("BITRISE_XAMARIN_TEST_RESULT", "failed"); err != nil {
-					log.Warn("Failed to export environment: %s, error: %s", "BITRISE_XAMARIN_TEST_RESULT", err)
 				}
 
 				if resultLog != "" {
@@ -412,7 +361,7 @@ func main() {
 					}
 				}
 
-				os.Exit(1)
+				failf("Test failed, error: %s", err)
 			}
 		}
 	}

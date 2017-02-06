@@ -5,8 +5,10 @@ app:
   envs:
   - STEP_VERSION: 2.1.0
 
-  - SAMPLE_APP_URL: https://github.com/bitrise-io/sample-apps-xamarin-ios.git
-  - BITRISE_PROJECT_PATH: CreditCardValidator.iOS.sln
+  - SAMPLE_APP_URL: https://github.com/bitrise-samples/sample-apps-xamarin-cross-platform.git
+  - BITRISE_PROJECT_PATH: Multiplatform.sln
+  - BITRISE_XAMARIN_CONFIGURATION: Debug
+  - BITRISE_XAMARIN_PLATFORM: iPhoneSimulator
 
 workflows:
   # ----------------------------------------------------------------
@@ -39,7 +41,6 @@ workflows:
         - pull_request_id: ""
         - clone_depth: ""
     - certificate-and-profile-installer: {}
-    - xamarin-user-management: {}
     - nuget-restore:
     - path::./:
         title: Step test
