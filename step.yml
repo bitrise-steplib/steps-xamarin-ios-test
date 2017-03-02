@@ -2,6 +2,31 @@ title: "Xamarin iOS Test"
 summary: Xamarin iOS Test
 description: |-
   Xamarin iOS Test
+
+  Use solution configuration-platform combination for automatig tests, which maps to an ios project configuration-platform combination, which:
+
+  * Starts the Xamarin Test Cloud Agent in your AppDelegate
+  * Builds for Simulator platform
+
+  Initialize you ios app in your UITest project as follows:
+
+  ```
+  iOSAppConfigurator iosConfigurator = ConfigureApp.iOS;
+
+  string appBundlePath = Environment.GetEnvironmentVariable("APP_BUNDLE_PATH");
+  if (!string.IsNullOrEmpty(appBundlePath))
+  {
+    iosConfigurator.AppBundle(appBundlePath);
+  }
+
+  string simulatorUDID = Environment.GetEnvironmentVariable("IOS_SIMULATOR_UDID");
+  if (!string.IsNullOrEmpty(simulatorUDID))
+  {
+    iosConfigurator.DeviceIdentifier(simulatorUDID);
+  }
+
+  return iosConfigurator.StartApp();
+  ```
 website: https://github.com/bitrise-steplib/steps-xamarin-ios-test
 source_code_url: https://github.com/bitrise-steplib/steps-xamarin-ios-test
 support_url: https://github.com/bitrise-steplib/steps-xamarin-ios-test/issues
