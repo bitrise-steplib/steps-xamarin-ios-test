@@ -111,7 +111,7 @@ func (mdtool Model) PrintableCommand() string {
 func (mdtool Model) Run() error {
 	cmdSlice := mdtool.buildCommandSlice()
 
-	command, err := command.NewFromSlice(cmdSlice...)
+	command, err := command.NewFromSlice(cmdSlice)
 	if err != nil {
 		return err
 	}

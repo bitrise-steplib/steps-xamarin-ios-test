@@ -6,8 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -18,6 +16,13 @@ import (
 	"github.com/bitrise-tools/go-xamarin/constants"
 	"github.com/bitrise-tools/go-xamarin/utility"
 )
+
+// Export ...
+type Export struct {
+	path      string
+	patterns  []string
+	outputDir string
+}
 
 func validateSolutionPth(pth string) error {
 	ext := filepath.Ext(pth)
@@ -118,8 +123,19 @@ func androidPackageNameFromManifestContent(manifestContent string) (string, erro
 	return result.Manifest.Package, nil
 }
 
-func exportApk(outputDir, assemblyName string) (string, error) {
-	// xamarin-sample-app/Droid/bin/Release/com.bitrise.xamarin.sampleapp.apk
+func exportApk(outputDir, assemblyName string, startTime, endTime time.Time) (string, error) {
+	if apkToExport, err := exportLatestModifiedWithinTimeInterval(outputDir, startTime, endTime, fmt.Sprintf(`(?i)%s.*signed\.apk$`, assemblyName), fmt.Sprintf(`(?i)%s\.apk$`, assemblyName), `(?i)signed\.apk$`, `(?i)\.apk$`); err == nil && apkToExport.path != "" {
+		return apkToExport.path, err
+	} else if latestPath, err := apkToExport.exportLatest(); err == nil && latestPath != "" {
+		log.Warnf("No apk generated during build")
+		log.Printf("Exporting latest generated apk: %s", latestPath)
+		return latestPath, nil
+	}
+
+	log.Printf("")
+	log.Warnf("Switching to legacy exporter")
+	log.Printf("")
+
 	apks, err := filepath.Glob(filepath.Join(outputDir, "*.apk"))
 	if err != nil {
 		return "", fmt.Errorf("failed to find apk, error: %s", err)
@@ -151,13 +167,36 @@ func exportApk(outputDir, assemblyName string) (string, error) {
 	}
 
 	if len(filteredApks) == 0 {
+		log.Errorf("Legacy exporter failed to find apk in (%s)", outputDir)
 		return "", nil
 	}
 
 	return filteredApks[0], nil
 }
 
-func exportLatestXCArchiveFromXcodeArchives(assemblyName string) (string, error) {
+func exportLatestIpa(outputDir, assemblyName string, startTime, endTime time.Time) (string, error) {
+	if ipaToExport, err := exportLatestModifiedWithinTimeInterval(outputDir, startTime, endTime, fmt.Sprintf(`(?i)%s\.ipa$`, assemblyName), `(?i)\.ipa$`); err == nil && ipaToExport.path != "" {
+		return ipaToExport.path, err
+	} else if latestPath, err := ipaToExport.exportLatest(); err == nil && latestPath != "" {
+		log.Warnf("No ipa generated during build")
+		log.Printf("Exporting latest generated ipa: %s", latestPath)
+		return latestPath, nil
+	}
+	return "", nil
+}
+
+func exportLatestXCArchive(outputDir, assemblyName string, startTime, endTime time.Time) (string, error) {
+	if archiveToExport, err := exportLatestModifiedWithinTimeInterval(outputDir, startTime, endTime, fmt.Sprintf(`(?i)%s.*\.xcarchive$`, assemblyName), `(?i)\.xcarchive$`); err == nil && archiveToExport.path != "" {
+		return archiveToExport.path, err
+	} else if latestPath, err := archiveToExport.exportLatest(); err == nil && latestPath != "" {
+		log.Warnf("No xcarchive generated during build")
+		log.Printf("Exporting latest generated xcarchive: %s", latestPath)
+		return latestPath, nil
+	}
+	return "", nil
+}
+
+func exportLatestXCArchiveFromXcodeArchives(assemblyName string, startTime, endTime time.Time) (string, error) {
 	userHomeDir := os.Getenv("HOME")
 	if userHomeDir == "" {
 		return "", fmt.Errorf("failed to get user home dir")
@@ -169,323 +208,81 @@ func exportLatestXCArchiveFromXcodeArchives(assemblyName string) (string, error)
 		return "", fmt.Errorf("no default Xcode archive path found at: %s", xcodeArchivesDir)
 	}
 
-	return exportLatestXCArchive(xcodeArchivesDir, assemblyName)
+	return exportLatestXCArchive(xcodeArchivesDir, assemblyName, startTime, endTime)
 }
 
-// Sort path
+func (export *Export) exportLatest() (string, error) {
+	var lastModTime time.Time
+	var latestPth string
 
-// SortableArchivePth ...
-type SortableArchivePth struct {
-	pth          string
-	dirNameDate  time.Time
-	fileNameDate time.Time
-	fileNameIdx  int
-}
-
-// NewSortableArchivePth ...
-func NewSortableArchivePth(pth string) (SortableArchivePth, error) {
-	archivePth := SortableArchivePth{
-		pth: pth,
-	}
-
-	// Directory Date
-	// $HOME/Library/Developer/Xcode/Archives/2016-10-07/
-	dirNameDateLayout := "2006-01-02"
-
-	dirPth := filepath.Dir(pth)
-	dirName := filepath.Base(dirPth)
-
-	dirNameDate, err := time.Parse(dirNameDateLayout, dirName)
-	if err != nil {
-		return SortableArchivePth{}, fmt.Errorf("failed to parse xcrachive dir name (%s) with layout (%s), error: %s", dirName, dirNameDateLayout, err)
-	}
-
-	archivePth.dirNameDate = dirNameDate
-
-	// File Date & Index
-	// XamarinSampleApp.iOS 1-01-17 2.51 AM 2.xcarchive
-	fileNameDateLayout := "1-02-06 3.04 PM"
-	fileNamePattern := `.* (?P<date>[0-9-]+ [0-9.]+ [PM|AM]+)[ ]*(?P<count>|[0-9]+).xcarchive`
-	fileNameRegexp := regexp.MustCompile(fileNamePattern)
-
-	fileName := filepath.Base(pth)
-
-	matches := fileNameRegexp.FindStringSubmatch(fileName)
-	if len(matches) == 3 {
-		fileNameDate, err := time.Parse(fileNameDateLayout, matches[1])
-		if err != nil {
-			return SortableArchivePth{}, fmt.Errorf("failed to parse xcrachive file name (%s) with layout (%s), error: %s", matches[1], fileNameDateLayout, err)
+	for _, pattern := range export.patterns {
+		if latestPth != "" {
+			break
 		}
-
-		archivePth.fileNameDate = fileNameDate
-
-		if matches[2] != "" {
-			fileNameIdx, err := strconv.Atoi(matches[2])
-			if err != nil {
-				return SortableArchivePth{}, fmt.Errorf("failed to parse (%s) as int, error: %s", matches[2], err)
+		re := regexp.MustCompile(pattern)
+		if err := filepath.Walk(export.outputDir, func(path string, info os.FileInfo, err error) error {
+			if re.FindString(path) != "" {
+				if latestPth == "" {
+					lastModTime = info.ModTime()
+				} else if lastModTime.After(info.ModTime()) {
+					return nil
+				}
+				lastModTime = info.ModTime()
+				latestPth = path
 			}
-
-			archivePth.fileNameIdx = fileNameIdx
-		} else {
-			archivePth.fileNameIdx = 0
-		}
-	}
-
-	return archivePth, nil
-}
-
-// ByArchiveDate ...
-type ByArchiveDate []SortableArchivePth
-
-// Len ...
-func (d ByArchiveDate) Len() int {
-	return len(d)
-}
-
-// Swap ...
-func (d ByArchiveDate) Swap(i, j int) {
-	d[i], d[j] = d[j], d[i]
-}
-
-func (d ByArchiveDate) Less(i, j int) bool {
-	archivePthI := d[i]
-	archivePthJ := d[j]
-
-	// compare directory name
-	// $HOME/Library/Developer/Xcode/Archives/2016-10-07/
-	// $HOME/Library/Developer/Xcode/Archives/2017-10-09/
-	if archivePthI.dirNameDate.After(archivePthJ.dirNameDate) {
-		return true
-	}
-
-	// compare file name
-	// XamarinSampleApp.iOS 10-07-16 3.41 PM 2.xcarchive
-	// XamarinSampleApp.iOS 10-09-16 3.41 PM.xcarchive
-	if archivePthI.fileNameDate.After(archivePthJ.fileNameDate) {
-		return true
-	}
-
-	if archivePthI.fileNameDate.Equal(archivePthJ.fileNameDate) && archivePthI.fileNameIdx > archivePthJ.fileNameIdx {
-		return true
-	}
-
-	return false
-}
-
-func exportLatestXCArchive(outputDir, assemblyName string) (string, error) {
-	// $HOME/Library/Developer/Xcode/Archives/2016-10-07/XamarinSampleApp.iOS 10-07-16 3.41 PM 2.xcarchive
-	pattern := filepath.Join(outputDir, "*", "*.xcarchive")
-	archives, err := filepath.Glob(pattern)
-	if err != nil {
-		return "", fmt.Errorf("failed to find xcarchive with pattern (%s), error: %s", pattern, err)
-	}
-	if len(archives) == 0 {
-		return "", nil
-	}
-
-	rePattern := fmt.Sprintf(".*/%s .*.xcarchive", assemblyName)
-	re := regexp.MustCompile(rePattern)
-
-	filteredArchives := []string{}
-	for _, archive := range archives {
-		if match := re.FindString(archive); match != "" {
-			filteredArchives = append(filteredArchives, archive)
-		}
-	}
-
-	if len(filteredArchives) == 0 {
-		filteredArchives = archives
-	}
-
-	if len(filteredArchives) == 0 {
-		return "", nil
-	}
-
-	// sort matching paths
-	sortableArchivePths := []SortableArchivePth{}
-	for _, pth := range filteredArchives {
-		sortableArchivePth, err := NewSortableArchivePth(pth)
-		if err != nil {
+			return nil
+		}); err != nil {
 			return "", err
 		}
-
-		sortableArchivePths = append(sortableArchivePths, sortableArchivePth)
 	}
-
-	sort.Sort(ByArchiveDate(sortableArchivePths))
-
-	sortedArchivePths := []string{}
-	for _, archivePth := range sortableArchivePths {
-		sortedArchivePths = append(sortedArchivePths, archivePth.pth)
-	}
-
-	return sortedArchivePths[0], nil
+	return latestPth, nil
 }
 
-// SortableIPAPth ...
-type SortableIPAPth struct {
-	pth         string
-	dirNameDate time.Time
-	dirNameIdx  int
-}
+func exportLatestModifiedWithinTimeInterval(outputDir string, startTime, endTime time.Time, patterns ...string) (*Export, error) {
+	var lastModTime time.Time
+	var latestPth string
 
-// NewSortableIPAPth ...
-func NewSortableIPAPth(pth string) (SortableIPAPth, error) {
-	ipaPth := SortableIPAPth{
-		pth: pth,
-	}
+	for _, pattern := range patterns {
 
-	// Directory Date
-	// ./Multiplatform.iOS 2016-10-06 22-45-23 2/
-	dirNameDatelayout := "2006-01-02 15-04-05"
-	dirNamePattern := `.* (?P<date>[0-9-]+-[0-9-]+-[0-9-]+ [0-9-]+-[0-9-]+-[0-9-]+)[ ]*(?P<count>[0-9]+|)`
-	dirNameRegexp := regexp.MustCompile(dirNamePattern)
-
-	dirPth := filepath.Dir(pth)
-	dirName := filepath.Base(dirPth)
-
-	matches := dirNameRegexp.FindStringSubmatch(dirName)
-	if len(matches) == 3 {
-		dirNameDate, err := time.Parse(dirNameDatelayout, matches[1])
-		if err != nil {
-			return SortableIPAPth{}, fmt.Errorf("failed to parse ipa dir name (%s) with layout (%s), error: %s", matches[1], dirNameDatelayout, err)
+		if latestPth != "" {
+			break
 		}
-
-		ipaPth.dirNameDate = dirNameDate
-
-		if matches[2] != "" {
-			dirNameIdx, err := strconv.Atoi(matches[2])
-			if err != nil {
-				return SortableIPAPth{}, fmt.Errorf("failed to parse (%s) as int, error: %s", matches[2], err)
+		re := regexp.MustCompile(pattern)
+		if err := filepath.Walk(outputDir, func(path string, info os.FileInfo, err error) error {
+			if re.FindString(path) != "" && isInTimeInterval(info.ModTime(), startTime, endTime) {
+				if latestPth == "" {
+					lastModTime = info.ModTime()
+				} else if lastModTime.After(info.ModTime()) {
+					return nil
+				}
+				lastModTime = info.ModTime()
+				latestPth = path
 			}
-
-			ipaPth.dirNameIdx = dirNameIdx
-		} else {
-			ipaPth.dirNameIdx = 0
-		}
-	} else {
-		return SortableIPAPth{}, fmt.Errorf("Path is not sortable: %s", pth)
-	}
-
-	return ipaPth, nil
-}
-
-// ByIpaDate ...
-type ByIpaDate []SortableIPAPth
-
-// Len ...
-func (d ByIpaDate) Len() int {
-	return len(d)
-}
-
-// Swap ...
-func (d ByIpaDate) Swap(i, j int) {
-	d[i], d[j] = d[j], d[i]
-}
-
-func (d ByIpaDate) Less(i, j int) bool {
-	ipaPthI := d[i]
-	ipaPthJ := d[j]
-
-	// Directory Date & Index
-	// ./Multiplatform.iOS 2016-10-06 11-45-23/
-	// ./Multiplatform.iOS 2016-10-06 22-45-23 2/
-	if ipaPthI.dirNameDate.After(ipaPthJ.dirNameDate) {
-		return true
-	}
-
-	if ipaPthI.dirNameDate.Equal(ipaPthJ.dirNameDate) && ipaPthI.dirNameIdx > ipaPthJ.dirNameIdx {
-		return true
-	}
-
-	return false
-}
-
-func exportLatestIpa(outputDir, assemblyName string) (string, error) {
-	// Multiplatform/iOS/bin/iPhone/Release/Multiplatform.iOS 2016-10-06 11-45-23/Multiplatform.iOS.ipa
-
-	patternInSubdir := filepath.Join(outputDir, "*", "*.ipa")
-	ipas, err := filepath.Glob(patternInSubdir)
-	if err != nil {
-		return "", fmt.Errorf("failed to find ipa with pattern (%s), error: %s", patternInSubdir, err)
-	}
-
-	patternInOutputDir := filepath.Join(outputDir, "*.ipa")
-	ipasInOutputDir, err := filepath.Glob(patternInOutputDir)
-	if err != nil {
-		return "", fmt.Errorf("failed to find ipa with pattern (%s) in upper path, error: %s", patternInOutputDir, err)
-	}
-
-	ipas = append(ipas, ipasInOutputDir...)
-
-	if len(ipas) == 0 {
-		return "", nil
-	}
-
-	rePatternInSubdirWithAssemblyName := fmt.Sprintf("%s .*/%s.ipa", assemblyName, assemblyName)
-	reInSubdirWithAssemblyName := regexp.MustCompile(rePatternInSubdirWithAssemblyName)
-
-	rePatternInOutputDirWithAssemblyName := fmt.Sprintf("%s.ipa", assemblyName)
-	reInOutputDirWithAssemblyName := regexp.MustCompile(rePatternInOutputDirWithAssemblyName)
-
-	filteredIpas := []string{}
-	for _, ipa := range ipas {
-		if match := reInSubdirWithAssemblyName.FindString(ipa); match != "" {
-			filteredIpas = append(filteredIpas, ipa)
-		} else if match := reInOutputDirWithAssemblyName.FindString(ipa); match != "" {
-			filteredIpas = append(filteredIpas, ipa)
+			return nil
+		}); err != nil {
+			return nil, err
 		}
 	}
-
-	if len(filteredIpas) == 0 {
-		filteredIpas = ipas
-	}
-
-	if len(filteredIpas) == 0 {
-		return "", nil
-	}
-
-	hasDate := 0
-
-	for _, pth := range filteredIpas {
-		if filepath.Dir(pth) != outputDir {
-			hasDate++
-		}
-	}
-
-	if hasDate == 0 {
-		//has no any timestamped path
-		return filteredIpas[0], nil
-	} else if hasDate == len(filteredIpas) {
-		//all path timestamped
-		sortableIpaPths := []SortableIPAPth{}
-		for _, pth := range filteredIpas {
-			ipaPth, err := NewSortableIPAPth(pth)
-			if err != nil {
-				return "", err
-			}
-
-			sortableIpaPths = append(sortableIpaPths, ipaPth)
-		}
-
-		sort.Sort(ByIpaDate(sortableIpaPths))
-
-		sortedIPAPths := []string{}
-		for _, ipaPth := range sortableIpaPths {
-			sortedIPAPths = append(sortedIPAPths, ipaPth.pth)
-		}
-
-		return sortedIPAPths[0], nil
-	}
-
-	//paths are mixed, warn user
-	log.Warnf("Multiple path found: %v", filteredIpas)
-	log.Warnf("USED: %s", filteredIpas[0])
-	return filteredIpas[0], nil
+	return &Export{path: latestPth, patterns: patterns, outputDir: outputDir}, nil
 }
 
-func exportAppDSYM(outputDir, assemblyName string) (string, error) {
-	// Multiplatform/iOS/bin/iPhone/Release/Multiplatform.iOS.app.dSYM
+func isInTimeInterval(modTime, startTime, endTime time.Time) bool {
+	return (modTime.After(startTime) || modTime.Equal(startTime)) && (modTime.Before(endTime) || modTime.Equal(endTime))
+}
+
+func exportAppDSYM(outputDir, assemblyName string, startTime, endTime time.Time) (string, error) {
+	if appDSYMToExport, err := exportLatestModifiedWithinTimeInterval(outputDir, startTime, endTime, fmt.Sprintf(`(?i)%s\.app\.dSYM$`, assemblyName), `(?i)\.app\.dSYM$`); err == nil && appDSYMToExport.path != "" {
+		return appDSYMToExport.path, err
+	} else if latestPath, err := appDSYMToExport.exportLatest(); err == nil && latestPath != "" {
+		log.Warnf("No app.dSYM generated during build")
+		log.Printf("Exporting latest generated app.dSYM: %s", latestPath)
+		return latestPath, nil
+	}
+
+	log.Printf("")
+	log.Warnf("Switching to legacy exporter")
+	log.Printf("")
+
 	pattern := filepath.Join(outputDir, "*.app.dSYM")
 	dSYMs, err := filepath.Glob(pattern)
 	if err != nil {
@@ -510,6 +307,7 @@ func exportAppDSYM(outputDir, assemblyName string) (string, error) {
 	}
 
 	if len(filteredDsyms) == 0 {
+		log.Errorf("Legacy exporter failed to find app.dSYM in (%s)", outputDir)
 		return "", nil
 	}
 
@@ -526,8 +324,19 @@ func exportFrameworkDSYMs(outputDir string) ([]string, error) {
 	return dSYMs, nil
 }
 
-func exportPKG(outputDir, assemblyName string) (string, error) {
-	// Multiplatform/Mac/bin/Release/Multiplatform.Mac-1.0.pkg
+func exportPKG(outputDir, assemblyName string, startTime, endTime time.Time) (string, error) {
+	if pkgToExport, err := exportLatestModifiedWithinTimeInterval(outputDir, startTime, endTime, fmt.Sprintf(`(?i)%s\.pkg$`, assemblyName), `(?i)\.pkg$`); err == nil && pkgToExport.path != "" {
+		return pkgToExport.path, err
+	} else if latestPath, err := pkgToExport.exportLatest(); err == nil && latestPath != "" {
+		log.Warnf("No pkg generated during build")
+		log.Printf("Exporting latest generated pkg: %s", latestPath)
+		return latestPath, nil
+	}
+
+	log.Printf("")
+	log.Warnf("Switching to legacy exporter")
+	log.Printf("")
+
 	pattern := filepath.Join(outputDir, "*.pkg")
 	pkgs, err := filepath.Glob(pattern)
 	if err != nil {
@@ -552,15 +361,26 @@ func exportPKG(outputDir, assemblyName string) (string, error) {
 	}
 
 	if len(filteredPKGs) == 0 {
+		log.Errorf("Legacy exporter failed to find pkg in (%s)", outputDir)
 		return "", nil
 	}
 
 	return filteredPKGs[0], nil
 }
 
-func exportApp(outputDir, assemblyName string) (string, error) {
-	// Multiplatform/Mac/bin/Release/Multiplatform.Mac.app
-	// xamarin-sample-app/iOS/bin/iPhoneSimulator/Debug/XamarinSampleApp.iOS.app
+func exportApp(outputDir, assemblyName string, startTime, endTime time.Time) (string, error) {
+	if appToExport, err := exportLatestModifiedWithinTimeInterval(outputDir, startTime, endTime, fmt.Sprintf(`(?i)%s\.app$`, assemblyName), `(?i)\.app$`); err == nil && appToExport.path != "" {
+		return appToExport.path, err
+	} else if latestPath, err := appToExport.exportLatest(); err == nil && latestPath != "" {
+		log.Warnf("No app generated during build")
+		log.Printf("Exporting latest generated app: %s", latestPath)
+		return latestPath, nil
+	}
+
+	log.Printf("")
+	log.Warnf("Switching to legacy exporter")
+	log.Printf("")
+
 	pattern := filepath.Join(outputDir, "*.app")
 	apps, err := filepath.Glob(pattern)
 	if err != nil {
@@ -585,14 +405,26 @@ func exportApp(outputDir, assemblyName string) (string, error) {
 	}
 
 	if len(filteredAPPs) == 0 {
+		log.Errorf("Legacy exporter failed to find app in (%s)", outputDir)
 		return "", nil
 	}
 
 	return filteredAPPs[0], nil
 }
 
-func exportDLL(outputDir, assemblyName string) (string, error) {
-	// xamarin-sample-app/UITests/bin/Release/XamarinSampleApp.UITests.dll
+func exportDLL(outputDir, assemblyName string, startTime, endTime time.Time) (string, error) {
+	if dllToExport, err := exportLatestModifiedWithinTimeInterval(outputDir, startTime, endTime, fmt.Sprintf(`(?i)%s\.dll$`, assemblyName), `(?i)\.dll$`); err == nil && dllToExport.path != "" {
+		return dllToExport.path, err
+	} else if latestPath, err := dllToExport.exportLatest(); err == nil && latestPath != "" {
+		log.Warnf("No dll generated during build")
+		log.Printf("Exporting latest generated dll: %s", latestPath)
+		return latestPath, nil
+	}
+
+	log.Printf("")
+	log.Warnf("Switching to legacy exporter")
+	log.Printf("")
+
 	pattern := filepath.Join(outputDir, "*.dll")
 	dlls, err := filepath.Glob(pattern)
 	if err != nil {
@@ -617,6 +449,7 @@ func exportDLL(outputDir, assemblyName string) (string, error) {
 	}
 
 	if len(filteredDLLs) == 0 {
+		log.Errorf("Legacy exporter failed to find DLL in (%s)", outputDir)
 		return "", nil
 	}
 

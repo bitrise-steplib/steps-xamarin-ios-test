@@ -128,7 +128,7 @@ func (nunitConsole Model) PrintableCommand() string {
 func (nunitConsole Model) Run() error {
 	cmdSlice := nunitConsole.commandSlice()
 
-	command, err := command.NewFromSlice(cmdSlice...)
+	command, err := command.NewFromSlice(cmdSlice)
 	if err != nil {
 		return err
 	}

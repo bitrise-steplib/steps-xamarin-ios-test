@@ -6,7 +6,9 @@ import (
 	"github.com/bitrise-tools/go-xamarin/analyzers/project"
 	"github.com/bitrise-tools/go-xamarin/constants"
 	"github.com/bitrise-tools/go-xamarin/tools"
+	"github.com/bitrise-tools/go-xamarin/tools/buildtools"
 	"github.com/bitrise-tools/go-xamarin/tools/buildtools/mdtool"
+	"github.com/bitrise-tools/go-xamarin/tools/buildtools/msbuild"
 	"github.com/bitrise-tools/go-xamarin/tools/buildtools/xbuild"
 	"github.com/bitrise-tools/go-xamarin/tools/nunit"
 	"github.com/bitrise-tools/go-xamarin/utility"
@@ -15,10 +17,10 @@ import (
 func (builder Model) buildSolutionCommand(configuration, platform string) (tools.Runnable, error) {
 	var buildCommand tools.Runnable
 
-	if builder.forceMDTool {
+	if builder.buildTool == buildtools.Mdtool {
 		command, err := mdtool.New(builder.solution.Pth)
 		if err != nil {
-			return tools.EmptyCommand{}, err
+			return nil, err
 		}
 
 		command.SetTarget("build")
@@ -26,9 +28,17 @@ func (builder Model) buildSolutionCommand(configuration, platform string) (tools
 		command.SetPlatform(platform)
 		buildCommand = command
 	} else {
-		command, err := xbuild.New(builder.solution.Pth, "")
+		var command *xbuild.Model
+		var err error
+
+		if builder.buildTool == buildtools.Msbuild {
+			command, err = msbuild.New(builder.solution.Pth, "")
+		} else {
+			command, err = xbuild.New(builder.solution.Pth, "")
+		}
+
 		if err != nil {
-			return tools.EmptyCommand{}, err
+			return nil, err
 		}
 
 		command.SetTarget("Build")
@@ -60,7 +70,7 @@ func (builder Model) buildProjectCommand(configuration, platform string, proj pr
 
 	switch proj.SDK {
 	case constants.SDKIOS, constants.SDKTvOS:
-		if builder.forceMDTool {
+		if builder.buildTool == buildtools.Mdtool {
 			command, err := mdtool.New(builder.solution.Pth)
 			if err != nil {
 				return []tools.Runnable{}, warnings, err
@@ -87,7 +97,15 @@ func (builder Model) buildProjectCommand(configuration, platform string, proj pr
 				buildCommands = append(buildCommands, command)
 			}
 		} else {
-			command, err := xbuild.New(builder.solution.Pth, "")
+			var command *xbuild.Model
+			var err error
+
+			if builder.buildTool == buildtools.Msbuild {
+				command, err = msbuild.New(builder.solution.Pth, "")
+			} else {
+				command, err = xbuild.New(builder.solution.Pth, "")
+			}
+
 			if err != nil {
 				return []tools.Runnable{}, warnings, err
 			}
@@ -104,7 +122,7 @@ func (builder Model) buildProjectCommand(configuration, platform string, proj pr
 			buildCommands = append(buildCommands, command)
 		}
 	case constants.SDKMacOS:
-		if builder.forceMDTool {
+		if builder.buildTool == buildtools.Mdtool {
 			command, err := mdtool.New(builder.solution.Pth)
 			if err != nil {
 				return []tools.Runnable{}, warnings, err
@@ -129,7 +147,15 @@ func (builder Model) buildProjectCommand(configuration, platform string, proj pr
 
 			buildCommands = append(buildCommands, command)
 		} else {
-			command, err := xbuild.New(builder.solution.Pth, "")
+			var command *xbuild.Model
+			var err error
+
+			if builder.buildTool == buildtools.Msbuild {
+				command, err = msbuild.New(builder.solution.Pth, "")
+			} else {
+				command, err = xbuild.New(builder.solution.Pth, "")
+			}
+
 			if err != nil {
 				return []tools.Runnable{}, warnings, err
 			}
@@ -142,7 +168,15 @@ func (builder Model) buildProjectCommand(configuration, platform string, proj pr
 			buildCommands = append(buildCommands, command)
 		}
 	case constants.SDKAndroid:
-		command, err := xbuild.New(builder.solution.Pth, proj.Pth)
+		var command *xbuild.Model
+		var err error
+
+		if builder.buildTool == buildtools.Msbuild {
+			command, err = msbuild.New(builder.solution.Pth, proj.Pth)
+		} else {
+			command, err = xbuild.New(builder.solution.Pth, proj.Pth)
+		}
+
 		if err != nil {
 			return []tools.Runnable{}, warnings, err
 		}
@@ -180,16 +214,35 @@ func (builder Model) buildXamarinUITestProjectCommand(configuration, platform st
 		warnings = append(warnings, fmt.Sprintf("project (%s) contains mapping for solution config (%s), but does not have project configuration", proj.Name, solutionConfig))
 	}
 
-	command, err := mdtool.New(builder.solution.Pth)
-	if err != nil {
-		return tools.EmptyCommand{}, warnings, err
+	var runnable tools.Runnable
+
+	if builder.buildTool == buildtools.Mdtool {
+		command, err := mdtool.New(builder.solution.Pth)
+		if err != nil {
+			return nil, warnings, err
+		}
+
+		command.SetTarget("build")
+		command.SetConfiguration(projectConfig.Configuration)
+		command.SetProjectName(proj.Name)
+		runnable = command
+	} else {
+		var command *xbuild.Model
+		var err error
+
+		if builder.buildTool == buildtools.Msbuild {
+			command, err = msbuild.New(builder.solution.Pth, proj.Pth)
+		} else {
+			command, err = xbuild.New(builder.solution.Pth, proj.Pth)
+		}
+
+		if err != nil {
+			return nil, warnings, err
+		}
+		runnable = command
 	}
 
-	command.SetTarget("build")
-	command.SetConfiguration(projectConfig.Configuration)
-	command.SetProjectName(proj.Name)
-
-	return command, warnings, nil
+	return runnable, warnings, nil
 }
 
 func (builder Model) buildNunitTestProjectCommand(configuration, platform string, proj project.Model, nunitConsolePth string) (tools.Runnable, []string, error) {
@@ -209,7 +262,7 @@ func (builder Model) buildNunitTestProjectCommand(configuration, platform string
 
 	command, err := nunit.New(nunitConsolePth)
 	if err != nil {
-		return tools.EmptyCommand{}, warnings, err
+		return nil, warnings, err
 	}
 
 	command.SetProjectPth(proj.Pth)

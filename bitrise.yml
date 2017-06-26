@@ -48,6 +48,7 @@ workflows:
         title: Step test
         inputs:
         - test_to_run: $TEST_TO_RUN
+        - build_tool: msbuild
     - script:
         inputs:
         - content: |-

@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/bitrise-io/go-utils/pathutil"
 	"github.com/bitrise-tools/go-xamarin/analyzers/project"
 	"github.com/bitrise-tools/go-xamarin/analyzers/solution"
 	"github.com/bitrise-tools/go-xamarin/constants"
 	"github.com/bitrise-tools/go-xamarin/tools"
+	"github.com/bitrise-tools/go-xamarin/tools/buildtools"
 	"github.com/bitrise-tools/go-xamarin/tools/nunit"
 	"github.com/bitrise-tools/go-xamarin/utility"
 )
@@ -19,7 +21,7 @@ type Model struct {
 	solution solution.Model
 
 	projectTypeWhitelist []constants.SDK
-	forceMDTool          bool
+	buildTool            buildtools.BuildTool
 }
 
 // OutputModel ...
@@ -57,7 +59,7 @@ type BuildCommandCallback func(solutionName string, projectName string, sdk cons
 type ClearCommandCallback func(project project.Model, dir string)
 
 // New ...
-func New(solutionPth string, projectTypeWhitelist []constants.SDK, forceMDTool bool) (Model, error) {
+func New(solutionPth string, projectTypeWhitelist []constants.SDK, buildTool buildtools.BuildTool) (Model, error) {
 	if err := validateSolutionPth(solutionPth); err != nil {
 		return Model{}, err
 	}
@@ -75,7 +77,7 @@ func New(solutionPth string, projectTypeWhitelist []constants.SDK, forceMDTool b
 		solution: solution,
 
 		projectTypeWhitelist: projectTypeWhitelist,
-		forceMDTool:          forceMDTool,
+		buildTool:            buildTool,
 	}, nil
 }
 
@@ -123,6 +125,10 @@ func (builder Model) CleanAll(callback ClearCommandCallback) error {
 
 // BuildSolution ...
 func (builder Model) BuildSolution(configuration, platform string, callback BuildCommandCallback) error {
+	if err := validateSolutionConfig(builder.solution, configuration, platform); err != nil {
+		return err
+	}
+
 	buildCommand, err := builder.buildSolutionCommand(configuration, platform)
 	if err != nil {
 		return fmt.Errorf("Failed to create build command, error: %s", err)
@@ -130,7 +136,7 @@ func (builder Model) BuildSolution(configuration, platform string, callback Buil
 
 	// Callback to notify the caller about next running command
 	if callback != nil {
-		callback(builder.solution.Name, "", constants.SDKUnknown, constants.TestFrameworkUnknown, buildCommand.PrintableCommand(), true)
+		callback(builder.solution.Name, "", constants.SDKUnknown, constants.TestFrameworkUnknown, buildCommand.PrintableCommand(), false)
 	}
 
 	return buildCommand.Run()
@@ -188,23 +194,21 @@ func (builder Model) BuildAllProjects(configuration, platform string, prepareCal
 	return warnings, nil
 }
 
-// BuildAllXamarinUITestAndReferredProjects ...
-func (builder Model) BuildAllXamarinUITestAndReferredProjects(configuration, platform string, prepareCallback PrepareCommandCallback, callback BuildCommandCallback) ([]string, error) {
+// BuildAllUITestableXamarinProjects ...
+func (builder Model) BuildAllUITestableXamarinProjects(configuration, platform string, prepareCallback PrepareCommandCallback, callback BuildCommandCallback) ([]string, error) {
 	warnings := []string{}
 
 	if err := validateSolutionConfig(builder.solution, configuration, platform); err != nil {
 		return warnings, err
 	}
 
-	buildableTestProjects, buildableReferredProjects, warns := builder.buildableXamarinUITestProjectsAndReferredProjects(configuration, platform)
-	if len(buildableTestProjects) == 0 || len(buildableReferredProjects) == 0 {
+	_, buildableReferredProjects, warns := builder.buildableXamarinUITestProjectsAndReferredProjects(configuration, platform)
+	if len(buildableReferredProjects) == 0 {
 		return warns, fmt.Errorf("No project to build found")
 	}
 
 	perfomedCommands := []tools.Printable{}
 
-	//
-	// First build all referred projects
 	for _, proj := range buildableReferredProjects {
 		buildCommands, warns, err := builder.buildProjectCommand(configuration, platform, proj)
 		warnings = append(warnings, warns...)
@@ -238,10 +242,25 @@ func (builder Model) BuildAllXamarinUITestAndReferredProjects(configuration, pla
 			}
 		}
 	}
-	// ---
 
-	//
-	// Then build all test projects
+	return warnings, nil
+}
+
+// RunAllXamarinUITests ...
+func (builder Model) RunAllXamarinUITests(configuration, platform string, prepareCallback PrepareCommandCallback, callback BuildCommandCallback) ([]string, error) {
+	warnings := []string{}
+
+	if err := validateSolutionConfig(builder.solution, configuration, platform); err != nil {
+		return warnings, err
+	}
+
+	buildableTestProjects, _, warns := builder.buildableXamarinUITestProjectsAndReferredProjects(configuration, platform)
+	if len(buildableTestProjects) == 0 {
+		return warns, fmt.Errorf("No project to build found")
+	}
+
+	perfomedCommands := []tools.Printable{}
+
 	for _, testProj := range buildableTestProjects {
 		buildCommand, warns, err := builder.buildXamarinUITestProjectCommand(configuration, platform, testProj)
 		warnings = append(warnings, warns...)
@@ -273,17 +292,33 @@ func (builder Model) BuildAllXamarinUITestAndReferredProjects(configuration, pla
 			perfomedCommands = append(perfomedCommands, buildCommand)
 		}
 	}
-	//
 
 	return warnings, nil
 }
 
-// BuildAllNunitTestProjects ...
-func (builder Model) BuildAllNunitTestProjects(configuration, platform string, prepareCallback PrepareCommandCallback, callback BuildCommandCallback) ([]string, error) {
+// BuildAndRunAllXamarinUITestAndReferredProjects ...
+func (builder Model) BuildAndRunAllXamarinUITestAndReferredProjects(configuration, platform string, prepareCallback PrepareCommandCallback, callback BuildCommandCallback) ([]string, error) {
 	warnings := []string{}
 
-	if err := validateSolutionConfig(builder.solution, configuration, platform); err != nil {
+	buildWarnings, err := builder.BuildAllUITestableXamarinProjects(configuration, platform, prepareCallback, callback)
+	warnings = append(warnings, buildWarnings...)
+	if err != nil {
 		return warnings, err
+	}
+
+	runWarnings, err := builder.RunAllXamarinUITests(configuration, platform, prepareCallback, callback)
+	warnings = append(warnings, runWarnings...)
+	if err != nil {
+		return warnings, err
+	}
+
+	return warnings, nil
+}
+
+// RunAllNunitTestProjects ...
+func (builder Model) RunAllNunitTestProjects(configuration, platform string, callback BuildCommandCallback, prepareCallback PrepareCommandCallback) ([]string, error) {
+	if err := validateSolutionConfig(builder.solution, configuration, platform); err != nil {
+		return nil, err
 	}
 
 	buildableProjects, warns := builder.buildableNunitTestProjects(configuration, platform)
@@ -293,45 +328,12 @@ func (builder Model) BuildAllNunitTestProjects(configuration, platform string, p
 
 	nunitConsolePth, err := nunit.SystemNunit3ConsolePath()
 	if err != nil {
-		return warnings, err
+		return nil, err
 	}
 
+	warnings := []string{}
 	perfomedCommands := []tools.Printable{}
 
-	//
-	// First build solution
-	buildCommand, err := builder.buildSolutionCommand(configuration, platform)
-	if err != nil {
-		return warnings, fmt.Errorf("Failed to create build command, error: %s", err)
-	}
-
-	// Callback to let the caller to modify the command
-	if prepareCallback != nil {
-		editabeCommand := tools.Editable(buildCommand)
-		prepareCallback(builder.solution.Name, "", constants.SDKUnknown, constants.TestFrameworkUnknown, &editabeCommand)
-	}
-
-	// Check if same command was already performed
-	alreadyPerformed := false
-	if tools.PrintableSliceContains(perfomedCommands, buildCommand) {
-		alreadyPerformed = true
-	}
-
-	// Callback to notify the caller about next running command
-	if callback != nil {
-		callback(builder.solution.Name, "", constants.SDKUnknown, constants.TestFrameworkUnknown, buildCommand.PrintableCommand(), alreadyPerformed)
-	}
-
-	if !alreadyPerformed {
-		if err := buildCommand.Run(); err != nil {
-			return warnings, err
-		}
-		perfomedCommands = append(perfomedCommands, buildCommand)
-	}
-	// ---
-
-	//
-	// Then build all test projects
 	for _, testProj := range buildableProjects {
 		buildCommand, warns, err := builder.buildNunitTestProjectCommand(configuration, platform, testProj, nunitConsolePth)
 		warnings = append(warnings, warns...)
@@ -342,7 +344,7 @@ func (builder Model) BuildAllNunitTestProjects(configuration, platform string, p
 		// Callback to let the caller to modify the command
 		if prepareCallback != nil {
 			editabeCommand := tools.Editable(buildCommand)
-			prepareCallback(builder.solution.Name, testProj.Name, testProj.SDK, testProj.TestFramework, &editabeCommand)
+			prepareCallback(builder.solution.Name, testProj.Name, constants.SDKUnknown, constants.TestFrameworkNunitTest, &editabeCommand)
 		}
 
 		// Check if same command was already performed
@@ -353,7 +355,7 @@ func (builder Model) BuildAllNunitTestProjects(configuration, platform string, p
 
 		// Callback to notify the caller about next running command
 		if callback != nil {
-			callback(builder.solution.Name, testProj.Name, testProj.SDK, testProj.TestFramework, buildCommand.PrintableCommand(), alreadyPerformed)
+			callback(builder.solution.Name, testProj.Name, constants.SDKUnknown, constants.TestFrameworkNunitTest, buildCommand.PrintableCommand(), alreadyPerformed)
 		}
 
 		if !alreadyPerformed {
@@ -363,13 +365,21 @@ func (builder Model) BuildAllNunitTestProjects(configuration, platform string, p
 			perfomedCommands = append(perfomedCommands, buildCommand)
 		}
 	}
-	// ---
 
 	return warnings, nil
 }
 
+// BuildAndRunAllNunitTestProjects ...
+func (builder Model) BuildAndRunAllNunitTestProjects(configuration, platform string, callback BuildCommandCallback, prepareCallback PrepareCommandCallback) ([]string, error) {
+	if err := builder.BuildSolution(configuration, platform, callback); err != nil {
+		return nil, err
+	}
+
+	return builder.RunAllNunitTestProjects(configuration, platform, callback, prepareCallback)
+}
+
 // CollectProjectOutputs ...
-func (builder Model) CollectProjectOutputs(configuration, platform string) (ProjectOutputMap, error) {
+func (builder Model) CollectProjectOutputs(configuration, platform string, startTime, endTime time.Time) (ProjectOutputMap, error) {
 	projectOutputMap := ProjectOutputMap{}
 
 	buildableProjects, _ := builder.buildableProjects(configuration, platform)
@@ -398,7 +408,7 @@ func (builder Model) CollectProjectOutputs(configuration, platform string) (Proj
 		switch proj.SDK {
 		case constants.SDKIOS, constants.SDKTvOS:
 			if isArchitectureArchiveable(projectConfig.MtouchArchs...) {
-				if xcarchivePth, err := exportLatestXCArchiveFromXcodeArchives(proj.AssemblyName); err != nil {
+				if xcarchivePth, err := exportLatestXCArchiveFromXcodeArchives(proj.AssemblyName, startTime, endTime); err != nil {
 					return ProjectOutputMap{}, err
 				} else if xcarchivePth != "" {
 					projectOutputs.Outputs = append(projectOutputs.Outputs, OutputModel{
@@ -407,7 +417,7 @@ func (builder Model) CollectProjectOutputs(configuration, platform string) (Proj
 					})
 				}
 
-				if ipaPth, err := exportLatestIpa(projectConfig.OutputDir, proj.AssemblyName); err != nil {
+				if ipaPth, err := exportLatestIpa(projectConfig.OutputDir, proj.AssemblyName, startTime, endTime); err != nil {
 					return ProjectOutputMap{}, err
 				} else if ipaPth != "" {
 					projectOutputs.Outputs = append(projectOutputs.Outputs, OutputModel{
@@ -416,7 +426,7 @@ func (builder Model) CollectProjectOutputs(configuration, platform string) (Proj
 					})
 				}
 
-				if dsymPth, err := exportAppDSYM(projectConfig.OutputDir, proj.AssemblyName); err != nil {
+				if dsymPth, err := exportAppDSYM(projectConfig.OutputDir, proj.AssemblyName, startTime, endTime); err != nil {
 					return ProjectOutputMap{}, err
 				} else if dsymPth != "" {
 					projectOutputs.Outputs = append(projectOutputs.Outputs, OutputModel{
@@ -426,7 +436,7 @@ func (builder Model) CollectProjectOutputs(configuration, platform string) (Proj
 				}
 			}
 
-			if appPth, err := exportApp(projectConfig.OutputDir, proj.AssemblyName); err != nil {
+			if appPth, err := exportApp(projectConfig.OutputDir, proj.AssemblyName, startTime, endTime); err != nil {
 				return ProjectOutputMap{}, err
 			} else if appPth != "" {
 				projectOutputs.Outputs = append(projectOutputs.Outputs, OutputModel{
@@ -435,8 +445,8 @@ func (builder Model) CollectProjectOutputs(configuration, platform string) (Proj
 				})
 			}
 		case constants.SDKMacOS:
-			if builder.forceMDTool {
-				if xcarchivePth, err := exportLatestXCArchiveFromXcodeArchives(proj.AssemblyName); err != nil {
+			if builder.buildTool == buildtools.Mdtool {
+				if xcarchivePth, err := exportLatestXCArchiveFromXcodeArchives(proj.AssemblyName, startTime, endTime); err != nil {
 					return ProjectOutputMap{}, err
 				} else if xcarchivePth != "" {
 					projectOutputs.Outputs = append(projectOutputs.Outputs, OutputModel{
@@ -445,7 +455,7 @@ func (builder Model) CollectProjectOutputs(configuration, platform string) (Proj
 					})
 				}
 			}
-			if appPth, err := exportApp(projectConfig.OutputDir, proj.AssemblyName); err != nil {
+			if appPth, err := exportApp(projectConfig.OutputDir, proj.AssemblyName, startTime, endTime); err != nil {
 				return ProjectOutputMap{}, err
 			} else if appPth != "" {
 				projectOutputs.Outputs = append(projectOutputs.Outputs, OutputModel{
@@ -453,7 +463,7 @@ func (builder Model) CollectProjectOutputs(configuration, platform string) (Proj
 					OutputType: constants.OutputTypeAPP,
 				})
 			}
-			if pkgPth, err := exportPKG(projectConfig.OutputDir, proj.AssemblyName); err != nil {
+			if pkgPth, err := exportPKG(projectConfig.OutputDir, proj.AssemblyName, startTime, endTime); err != nil {
 				return ProjectOutputMap{}, err
 			} else if pkgPth != "" {
 				projectOutputs.Outputs = append(projectOutputs.Outputs, OutputModel{
@@ -467,7 +477,7 @@ func (builder Model) CollectProjectOutputs(configuration, platform string) (Proj
 				return ProjectOutputMap{}, err
 			}
 
-			if apkPth, err := exportApk(projectConfig.OutputDir, packageName); err != nil {
+			if apkPth, err := exportApk(projectConfig.OutputDir, packageName, startTime, endTime); err != nil {
 				return ProjectOutputMap{}, err
 			} else if apkPth != "" {
 				projectOutputs.Outputs = append(projectOutputs.Outputs, OutputModel{
@@ -486,7 +496,7 @@ func (builder Model) CollectProjectOutputs(configuration, platform string) (Proj
 }
 
 // CollectXamarinUITestProjectOutputs ...
-func (builder Model) CollectXamarinUITestProjectOutputs(configuration, platform string) (TestProjectOutputMap, []string, error) {
+func (builder Model) CollectXamarinUITestProjectOutputs(configuration, platform string, startTime, endTime time.Time) (TestProjectOutputMap, []string, error) {
 	testProjectOutputMap := TestProjectOutputMap{}
 	warnings := []string{}
 
@@ -505,7 +515,7 @@ func (builder Model) CollectXamarinUITestProjectOutputs(configuration, platform 
 			continue
 		}
 
-		if dllPth, err := exportDLL(projectConfig.OutputDir, testProj.AssemblyName); err != nil {
+		if dllPth, err := exportDLL(projectConfig.OutputDir, testProj.AssemblyName, startTime, endTime); err != nil {
 			return TestProjectOutputMap{}, warnings, err
 		} else if dllPth != "" {
 			referredProjectNames := []string{}
