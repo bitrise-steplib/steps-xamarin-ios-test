@@ -32,7 +32,6 @@ type ConfigsModel struct {
 	SimulatorOsVersion string
 
 	BuildTool string
-
 	DeployDir string
 }
 
@@ -47,7 +46,6 @@ func createConfigsModelFromEnvs() ConfigsModel {
 		SimulatorOsVersion: os.Getenv("simulator_os_version"),
 
 		BuildTool: os.Getenv("build_tool"),
-
 		DeployDir: os.Getenv("BITRISE_DEPLOY_DIR"),
 	}
 }
@@ -270,16 +268,15 @@ func main() {
 	}
 
 	startTime := time.Now()
-
 	warnings, err := builder.BuildAndRunAllXamarinUITestAndReferredProjects(configs.XamarinConfiguration, configs.XamarinPlatform, nil, callback)
+	endTime := time.Now()
+
 	for _, warning := range warnings {
 		log.Warnf(warning)
 	}
 	if err != nil {
 		failf("Build failed, error: %s", err)
 	}
-
-	endTime := time.Now()
 
 	projectOutputMap, err := builder.CollectProjectOutputs(configs.XamarinConfiguration, configs.XamarinPlatform, startTime, endTime)
 	if err != nil {
