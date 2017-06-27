@@ -2,3 +2,4 @@ TestResult.xml
 .bitrise.secrets.yml
 .idea/
 _tmp/
+.gows*

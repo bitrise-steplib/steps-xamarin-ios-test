@@ -17,6 +17,7 @@ workflows:
   # --- workflow to Step Test
   ci:
     before_run:
+    - audit-this-step
     - go-tests
     steps:
     - script:
