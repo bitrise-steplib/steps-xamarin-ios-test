@@ -1,6 +1,11 @@
-## Changelog (Current version: 2.3.0)
+## Changelog (Current version: 2.3.1)
 
 -----------------
+
+### 2.3.1 (2017 Jun 27)
+
+* [233eeb0] prepare for 2.3.1
+* [ed33550] input grouping and reordering (#33)
 
 ### 2.3.0 (2017 Jun 27)
 
