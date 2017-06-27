@@ -107,7 +107,7 @@ inputs:
   - build_tool: "xbuild"
     opts:
       category: Debug
-      title: (Experimental) Which tool to use for building?
+      title: Which tool to use for building?
       description: |-
         Which tool to use for building?
       value_options:
