@@ -2,18 +2,20 @@ package main
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
-	"github.com/bitrise-io/go-utils/command"
 	"github.com/bitrise-io/go-utils/fileutil"
 	"github.com/bitrise-io/go-utils/log"
 	"github.com/bitrise-io/go-utils/pathutil"
+	"github.com/bitrise-tools/go-steputils/input"
+	"github.com/bitrise-tools/go-steputils/tools"
 	"github.com/bitrise-tools/go-xamarin/builder"
 	"github.com/bitrise-tools/go-xamarin/constants"
+	"github.com/bitrise-tools/go-xamarin/tools/buildtools"
 	"github.com/bitrise-tools/go-xamarin/tools/nunit"
 	"github.com/bitrise-tools/go-xcode/simulator"
 	"github.com/hashicorp/go-version"
@@ -25,11 +27,11 @@ type ConfigsModel struct {
 	XamarinConfiguration string
 	XamarinPlatform      string
 
-	TestToRun string
-
+	TestToRun          string
 	SimulatorDevice    string
 	SimulatorOsVersion string
 
+	BuildTool string
 	DeployDir string
 }
 
@@ -43,6 +45,7 @@ func createConfigsModelFromEnvs() ConfigsModel {
 		SimulatorDevice:    os.Getenv("simulator_device"),
 		SimulatorOsVersion: os.Getenv("simulator_os_version"),
 
+		BuildTool: os.Getenv("build_tool"),
 		DeployDir: os.Getenv("BITRISE_DEPLOY_DIR"),
 	}
 }
@@ -62,37 +65,32 @@ func (configs ConfigsModel) print() {
 
 	log.Infof("Other Configs:")
 
+	log.Printf("- BuildTool: %s", configs.BuildTool)
 	log.Printf("- DeployDir: %s", configs.DeployDir)
 }
 
 func (configs ConfigsModel) validate() error {
-	if configs.XamarinSolution == "" {
-		return errors.New("no XamarinSolution parameter specified")
-	}
-	if exist, err := pathutil.IsPathExists(configs.XamarinSolution); err != nil {
-		return fmt.Errorf("failed to check if XamarinSolution exist at: %s, error: %s", configs.XamarinSolution, err)
-	} else if !exist {
-		return fmt.Errorf("XamarinSolution not exist at: %s", configs.XamarinSolution)
+	if err := input.ValidateIfPathExists(configs.XamarinSolution); err != nil {
+		return fmt.Errorf("XamarinSolution - %s", err)
 	}
 
-	if configs.XamarinConfiguration == "" {
-		return errors.New("no XamarinConfiguration parameter specified")
-	}
-	if configs.XamarinPlatform == "" {
-		return errors.New("no XamarinPlatform parameter specified")
+	if err := input.ValidateIfNotEmpty(configs.XamarinConfiguration); err != nil {
+		return fmt.Errorf("XamarinConfiguration - %s", err)
 	}
 
-	if configs.SimulatorDevice == "" {
-		return errors.New("no SimulatorDevice parameter specified")
+	if err := input.ValidateIfNotEmpty(configs.XamarinPlatform); err != nil {
+		return fmt.Errorf("XamarinPlatform - %s", err)
+	}
+
+	if err := input.ValidateIfNotEmpty(configs.SimulatorDevice); err != nil {
+		return fmt.Errorf("SimulatorDevice - %s", err)
+	}
+
+	if err := input.ValidateWithOptions(configs.BuildTool, "msbuild", "xbuild", "mdtool"); err != nil {
+		return fmt.Errorf("BuildTool - %s", err)
 	}
 
 	return nil
-}
-
-func exportEnvironmentWithEnvman(keyStr, valueStr string) error {
-	cmd := command.New("envman", "add", "--key", keyStr)
-	cmd.SetStdin(strings.NewReader(valueStr))
-	return cmd.Run()
 }
 
 func getLatestIOSVersion(osVersionSimulatorInfosMap simulator.OsVersionSimulatorInfosMap) (string, error) {
@@ -195,11 +193,9 @@ func parseErrorFromResultLog(content string) (string, error) {
 
 func failf(format string, v ...interface{}) {
 	log.Errorf(format, v...)
-
-	if err := exportEnvironmentWithEnvman("BITRISE_XAMARIN_TEST_RESULT", "failed"); err != nil {
+	if err := tools.ExportEnvironmentWithEnvman("BITRISE_XAMARIN_TEST_RESULT", "failed"); err != nil {
 		log.Warnf("Failed to export environment: %s, error: %s", "BITRISE_XAMARIN_TEST_RESULT", err)
 	}
-
 	os.Exit(1)
 }
 
@@ -240,7 +236,14 @@ func main() {
 	fmt.Println()
 	log.Infof("Building all iOS Xamarin UITest and Referred Projects in solution: %s", configs.XamarinSolution)
 
-	builder, err := builder.New(configs.XamarinSolution, []constants.SDK{constants.SDKIOS}, false)
+	buildTool := buildtools.Xbuild
+	if configs.BuildTool == "mdtool" {
+		buildTool = buildtools.Mdtool
+	} else if configs.BuildTool == "msbuild" {
+		buildTool = buildtools.Msbuild
+	}
+
+	builder, err := builder.New(configs.XamarinSolution, []constants.SDK{constants.SDKIOS}, buildTool)
 	if err != nil {
 		failf("Failed to create xamarin builder, error: %s", err)
 	}
@@ -262,7 +265,10 @@ func main() {
 		fmt.Println()
 	}
 
-	warnings, err := builder.BuildAllXamarinUITestAndReferredProjects(configs.XamarinConfiguration, configs.XamarinPlatform, nil, callback)
+	startTime := time.Now()
+	warnings, err := builder.BuildAndRunAllXamarinUITestAndReferredProjects(configs.XamarinConfiguration, configs.XamarinPlatform, nil, callback)
+	endTime := time.Now()
+
 	for _, warning := range warnings {
 		log.Warnf(warning)
 	}
@@ -270,17 +276,20 @@ func main() {
 		failf("Build failed, error: %s", err)
 	}
 
-	projectOutputMap, err := builder.CollectProjectOutputs(configs.XamarinConfiguration, configs.XamarinPlatform)
+	projectOutputMap, err := builder.CollectProjectOutputs(configs.XamarinConfiguration, configs.XamarinPlatform, startTime, endTime)
 	if err != nil {
 		failf("Failed to collect project outputs, error: %s", err)
 	}
 
-	testProjectOutputMap, warnings, err := builder.CollectXamarinUITestProjectOutputs(configs.XamarinConfiguration, configs.XamarinPlatform)
+	testProjectOutputMap, warnings, err := builder.CollectXamarinUITestProjectOutputs(configs.XamarinConfiguration, configs.XamarinPlatform, startTime, endTime)
 	for _, warning := range warnings {
 		log.Warnf(warning)
 	}
 	if err != nil {
 		failf("Failed to collect test project output, error: %s", err)
+	}
+	if len(testProjectOutputMap) == 0 {
+		failf("No testable output generated")
 	}
 	// ---
 
@@ -355,7 +364,7 @@ func main() {
 				}
 
 				if resultLog != "" {
-					if err := exportEnvironmentWithEnvman("BITRISE_XAMARIN_TEST_FULL_RESULTS_TEXT", resultLog); err != nil {
+					if err := tools.ExportEnvironmentWithEnvman("BITRISE_XAMARIN_TEST_FULL_RESULTS_TEXT", resultLog); err != nil {
 						log.Warnf("Failed to export environment: %s, error: %s", "BITRISE_XAMARIN_TEST_FULL_RESULTS_TEXT", err)
 					}
 				}
@@ -365,12 +374,12 @@ func main() {
 		}
 	}
 
-	if err := exportEnvironmentWithEnvman("BITRISE_XAMARIN_TEST_RESULT", "succeeded"); err != nil {
+	if err := tools.ExportEnvironmentWithEnvman("BITRISE_XAMARIN_TEST_RESULT", "succeeded"); err != nil {
 		log.Warnf("Failed to export environment: %s, error: %s", "BITRISE_XAMARIN_TEST_RESULT", err)
 	}
 
 	if resultLog != "" {
-		if err := exportEnvironmentWithEnvman("BITRISE_XAMARIN_TEST_FULL_RESULTS_TEXT", resultLog); err != nil {
+		if err := tools.ExportEnvironmentWithEnvman("BITRISE_XAMARIN_TEST_FULL_RESULTS_TEXT", resultLog); err != nil {
 			log.Warnf("Failed to export environment: %s, error: %s", "BITRISE_XAMARIN_TEST_FULL_RESULTS_TEXT", err)
 		}
 	}

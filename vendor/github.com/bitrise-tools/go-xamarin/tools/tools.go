@@ -22,13 +22,13 @@ type Editable interface {
 type EmptyCommand struct{}
 
 // PrintableCommand ...
-func (cmd EmptyCommand) PrintableCommand() string { return "" }
+func (cmd *EmptyCommand) PrintableCommand() string { return "" }
 
 // SetCustomOptions ...
-func (cmd EmptyCommand) SetCustomOptions(options ...string) {}
+func (cmd *EmptyCommand) SetCustomOptions(options ...string) {}
 
 // Run ...
-func (cmd EmptyCommand) Run() error { return nil }
+func (cmd *EmptyCommand) Run() error { return nil }
 
 // ---
 

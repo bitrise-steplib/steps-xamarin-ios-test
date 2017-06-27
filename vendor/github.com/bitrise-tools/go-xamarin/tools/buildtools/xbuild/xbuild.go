@@ -12,10 +12,10 @@ import (
 
 // Model ...
 type Model struct {
-	buildTool string
+	BuildTool string
 
-	solutionPth string
-	projectPth  string
+	SolutionPth string
+	ProjectPth  string
 
 	target        string
 	configuration string
@@ -43,7 +43,7 @@ func New(solutionPth, projectPth string) (*Model, error) {
 		absProjectPth = absPth
 	}
 
-	return &Model{solutionPth: absSolutionPth, projectPth: absProjectPth, buildTool: constants.XbuildPath}, nil
+	return &Model{SolutionPth: absSolutionPth, ProjectPth: absProjectPth, BuildTool: constants.XbuildPath}, nil
 }
 
 // SetTarget ...
@@ -81,20 +81,20 @@ func (xbuild *Model) SetCustomOptions(options ...string) {
 	xbuild.customOptions = options
 }
 
-func (xbuild Model) buildCommandSlice() []string {
-	cmdSlice := []string{xbuild.buildTool}
+func (xbuild *Model) buildCommandSlice() []string {
+	cmdSlice := []string{xbuild.BuildTool}
 
-	if xbuild.projectPth != "" {
-		cmdSlice = append(cmdSlice, xbuild.projectPth)
+	if xbuild.ProjectPth != "" {
+		cmdSlice = append(cmdSlice, xbuild.ProjectPth)
 	} else {
-		cmdSlice = append(cmdSlice, xbuild.solutionPth)
+		cmdSlice = append(cmdSlice, xbuild.SolutionPth)
 	}
 
 	if xbuild.target != "" {
 		cmdSlice = append(cmdSlice, fmt.Sprintf("/target:%s", xbuild.target))
 	}
 
-	cmdSlice = append(cmdSlice, fmt.Sprintf("/p:SolutionDir=%s", filepath.Dir(xbuild.solutionPth)))
+	cmdSlice = append(cmdSlice, fmt.Sprintf("/p:SolutionDir=%s", filepath.Dir(xbuild.SolutionPth)))
 
 	if xbuild.configuration != "" {
 		cmdSlice = append(cmdSlice, fmt.Sprintf("/p:Configuration=%s", xbuild.configuration))
@@ -120,17 +120,17 @@ func (xbuild Model) buildCommandSlice() []string {
 }
 
 // PrintableCommand ...
-func (xbuild Model) PrintableCommand() string {
+func (xbuild *Model) PrintableCommand() string {
 	cmdSlice := xbuild.buildCommandSlice()
 
 	return command.PrintableCommandArgs(true, cmdSlice)
 }
 
 // Run ...
-func (xbuild Model) Run() error {
+func (xbuild *Model) Run() error {
 	cmdSlice := xbuild.buildCommandSlice()
 
-	command, err := command.NewFromSlice(cmdSlice...)
+	command, err := command.NewFromSlice(cmdSlice)
 	if err != nil {
 		return err
 	}
