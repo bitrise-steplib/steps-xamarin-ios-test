@@ -23,13 +23,13 @@ import (
 
 // ConfigsModel ...
 type ConfigsModel struct {
+	SimulatorDevice    string
+	SimulatorOsVersion string
+	TestToRun          string
+
 	XamarinSolution      string
 	XamarinConfiguration string
 	XamarinPlatform      string
-
-	TestToRun          string
-	SimulatorDevice    string
-	SimulatorOsVersion string
 
 	BuildTool string
 	DeployDir string
@@ -37,13 +37,13 @@ type ConfigsModel struct {
 
 func createConfigsModelFromEnvs() ConfigsModel {
 	return ConfigsModel{
+		SimulatorDevice:    os.Getenv("simulator_device"),
+		SimulatorOsVersion: os.Getenv("simulator_os_version"),
+		TestToRun:          os.Getenv("test_to_run"),
+
 		XamarinSolution:      os.Getenv("xamarin_project"),
 		XamarinConfiguration: os.Getenv("xamarin_configuration"),
 		XamarinPlatform:      os.Getenv("xamarin_platform"),
-
-		TestToRun:          os.Getenv("test_to_run"),
-		SimulatorDevice:    os.Getenv("simulator_device"),
-		SimulatorOsVersion: os.Getenv("simulator_os_version"),
 
 		BuildTool: os.Getenv("build_tool"),
 		DeployDir: os.Getenv("BITRISE_DEPLOY_DIR"),
@@ -51,39 +51,40 @@ func createConfigsModelFromEnvs() ConfigsModel {
 }
 
 func (configs ConfigsModel) print() {
-	log.Infof("Build Configs:")
+	log.Infof("Testing:")
+
+	log.Printf("- SimulatorDevice: %s", configs.SimulatorDevice)
+	log.Printf("- SimulatorOsVersion: %s", configs.SimulatorOsVersion)
+	log.Printf("- TestToRun: %s", configs.TestToRun)
+
+	log.Infof("Configs:")
 
 	log.Printf("- XamarinSolution: %s", configs.XamarinSolution)
 	log.Printf("- XamarinConfiguration: %s", configs.XamarinConfiguration)
 	log.Printf("- XamarinPlatform: %s", configs.XamarinPlatform)
 
-	log.Infof("Xamarin UITest Configs:")
-
-	log.Printf("- TestToRun: %s", configs.TestToRun)
-	log.Printf("- SimulatorDevice: %s", configs.SimulatorDevice)
-	log.Printf("- SimulatorOsVersion: %s", configs.SimulatorOsVersion)
-
-	log.Infof("Other Configs:")
+	log.Infof("Debug:")
 
 	log.Printf("- BuildTool: %s", configs.BuildTool)
 	log.Printf("- DeployDir: %s", configs.DeployDir)
 }
 
 func (configs ConfigsModel) validate() error {
+	if err := input.ValidateIfNotEmpty(configs.SimulatorDevice); err != nil {
+		return fmt.Errorf("SimulatorDevice - %s", err)
+	}
+	if err := input.ValidateIfNotEmpty(configs.SimulatorOsVersion); err != nil {
+		return fmt.Errorf("SimulatorOsVersion - %s", err)
+	}
+
 	if err := input.ValidateIfPathExists(configs.XamarinSolution); err != nil {
 		return fmt.Errorf("XamarinSolution - %s", err)
 	}
-
 	if err := input.ValidateIfNotEmpty(configs.XamarinConfiguration); err != nil {
 		return fmt.Errorf("XamarinConfiguration - %s", err)
 	}
-
 	if err := input.ValidateIfNotEmpty(configs.XamarinPlatform); err != nil {
 		return fmt.Errorf("XamarinPlatform - %s", err)
-	}
-
-	if err := input.ValidateIfNotEmpty(configs.SimulatorDevice); err != nil {
-		return fmt.Errorf("SimulatorDevice - %s", err)
 	}
 
 	if err := input.ValidateWithOptions(configs.BuildTool, "msbuild", "xbuild", "mdtool"); err != nil {

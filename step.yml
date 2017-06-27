@@ -49,32 +49,9 @@ toolkit:
   go:
     package_name: github.com/bitrise-steplib/steps-xamarin-ios-test
 inputs:
-  - xamarin_project: $BITRISE_PROJECT_PATH
-    opts:
-      title: Path to Xamarin Solution
-      description: |
-        Path to Xamarin Solution
-      is_required: true
-  - xamarin_configuration: Debug
-    opts:
-      title: Xamarin solution configuration
-      description: |
-        Xamarin solution configuration
-      is_required: true
-  - xamarin_platform: iPhoneSimulator
-    opts:
-      title: Xamarin solution platform
-      description: |
-        Xamarin solution platform
-      is_required: true
-  - test_to_run:
-    opts:
-      title: "Test name to run"
-      description: |
-        Comma-separated list of names of tests to run.
-        If not specified all tests will run.
   - simulator_device: iPhone 6s Plus
     opts:
+      category: Testing
       title: "Device"
       description: |
         Set it as it is shown in
@@ -89,16 +66,48 @@ inputs:
       is_required: true
   - simulator_os_version: latest
     opts:
+      category: Testing
       title: "OS version"
       description: |
         A couple of format examples:
         * iOS 8.4
         * iOS 9.3
         * latest
+      is_required: true
+  - test_to_run:
+    opts:
+      category: Testing
+      title: "Test name to run"
+      description: |
+        Comma-separated list of names of tests to run.
+        If not specified all tests will run.
+
+        Format example: `Multiplatform.UItest.Tests(iOS)`
+  - xamarin_project: $BITRISE_PROJECT_PATH
+    opts:
+      category: Config
+      title: Path to Xamarin Solution
+      description: |
+        Path to Xamarin Solution
+      is_required: true
+  - xamarin_configuration: Debug
+    opts:
+      category: Config
+      title: Xamarin solution configuration
+      description: |
+        Xamarin solution configuration
+      is_required: true
+  - xamarin_platform: iPhoneSimulator
+    opts:
+      category: Config
+      title: Xamarin solution platform
+      description: |
+        Xamarin solution platform
+      is_required: true
   - build_tool: "xbuild"
     opts:
       category: Debug
-      title: (Experimental) Which tool to use for building?
+      title: Which tool to use for building?
       description: |-
         Which tool to use for building?
       value_options:
