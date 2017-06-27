@@ -235,10 +235,11 @@ func (builder Model) buildXamarinUITestProjectCommand(configuration, platform st
 		} else {
 			command, err = xbuild.New(builder.solution.Pth, proj.Pth)
 		}
-
 		if err != nil {
 			return nil, warnings, err
 		}
+
+		command.SetConfiguration(projectConfig.Configuration)
 		runnable = command
 	}
 
