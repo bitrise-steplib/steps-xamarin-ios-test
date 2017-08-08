@@ -104,7 +104,7 @@ inputs:
       description: |
         Xamarin solution platform
       is_required: true
-  - build_tool: "xbuild"
+  - build_tool: "msbuild"
     opts:
       category: Debug
       title: Which tool to use for building?
@@ -113,7 +113,6 @@ inputs:
       value_options:
       - xbuild
       - msbuild
-      - mdtool
       is_required: true
 outputs:
 - BITRISE_XAMARIN_TEST_RESULT:
