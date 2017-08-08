@@ -7,7 +7,6 @@ import (
 	"github.com/bitrise-tools/go-xamarin/constants"
 	"github.com/bitrise-tools/go-xamarin/tools"
 	"github.com/bitrise-tools/go-xamarin/tools/buildtools"
-	"github.com/bitrise-tools/go-xamarin/tools/buildtools/mdtool"
 	"github.com/bitrise-tools/go-xamarin/tools/buildtools/msbuild"
 	"github.com/bitrise-tools/go-xamarin/tools/buildtools/xbuild"
 	"github.com/bitrise-tools/go-xamarin/tools/nunit"
@@ -17,35 +16,23 @@ import (
 func (builder Model) buildSolutionCommand(configuration, platform string) (tools.Runnable, error) {
 	var buildCommand tools.Runnable
 
-	if builder.buildTool == buildtools.Mdtool {
-		command, err := mdtool.New(builder.solution.Pth)
-		if err != nil {
-			return nil, err
-		}
+	var command *xbuild.Model
+	var err error
 
-		command.SetTarget("build")
-		command.SetConfiguration(configuration)
-		command.SetPlatform(platform)
-		buildCommand = command
+	if builder.buildTool == buildtools.Msbuild {
+		command, err = msbuild.New(builder.solution.Pth, "")
 	} else {
-		var command *xbuild.Model
-		var err error
-
-		if builder.buildTool == buildtools.Msbuild {
-			command, err = msbuild.New(builder.solution.Pth, "")
-		} else {
-			command, err = xbuild.New(builder.solution.Pth, "")
-		}
-
-		if err != nil {
-			return nil, err
-		}
-
-		command.SetTarget("Build")
-		command.SetConfiguration(configuration)
-		command.SetPlatform(platform)
-		buildCommand = command
+		command, err = xbuild.New(builder.solution.Pth, "")
 	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	command.SetTarget("Build")
+	command.SetConfiguration(configuration)
+	command.SetPlatform(platform)
+	buildCommand = command
 
 	return buildCommand, nil
 }
@@ -70,103 +57,49 @@ func (builder Model) buildProjectCommand(configuration, platform string, proj pr
 
 	switch proj.SDK {
 	case constants.SDKIOS, constants.SDKTvOS:
-		if builder.buildTool == buildtools.Mdtool {
-			command, err := mdtool.New(builder.solution.Pth)
-			if err != nil {
-				return []tools.Runnable{}, warnings, err
-			}
+		var command *xbuild.Model
+		var err error
 
-			command.SetTarget("build")
-			command.SetConfiguration(projectConfig.Configuration)
-			command.SetPlatform(projectConfig.Platform)
-			command.SetProjectName(proj.Name)
-
-			buildCommands = append(buildCommands, command)
-
-			if isArchitectureArchiveable(projectConfig.MtouchArchs...) {
-				command, err := mdtool.New(builder.solution.Pth)
-				if err != nil {
-					return []tools.Runnable{}, warnings, err
-				}
-
-				command.SetTarget("archive")
-				command.SetConfiguration(projectConfig.Configuration)
-				command.SetPlatform(projectConfig.Platform)
-				command.SetProjectName(proj.Name)
-
-				buildCommands = append(buildCommands, command)
-			}
+		if builder.buildTool == buildtools.Msbuild {
+			command, err = msbuild.New(builder.solution.Pth, "")
 		} else {
-			var command *xbuild.Model
-			var err error
-
-			if builder.buildTool == buildtools.Msbuild {
-				command, err = msbuild.New(builder.solution.Pth, "")
-			} else {
-				command, err = xbuild.New(builder.solution.Pth, "")
-			}
-
-			if err != nil {
-				return []tools.Runnable{}, warnings, err
-			}
-
-			command.SetTarget("Build")
-			command.SetConfiguration(configuration)
-			command.SetPlatform(platform)
-
-			if isArchitectureArchiveable(projectConfig.MtouchArchs...) {
-				command.SetBuildIpa(true)
-				command.SetArchiveOnBuild(true)
-			}
-
-			buildCommands = append(buildCommands, command)
+			command, err = xbuild.New(builder.solution.Pth, "")
 		}
-	case constants.SDKMacOS:
-		if builder.buildTool == buildtools.Mdtool {
-			command, err := mdtool.New(builder.solution.Pth)
-			if err != nil {
-				return []tools.Runnable{}, warnings, err
-			}
 
-			command.SetTarget("build")
-			command.SetConfiguration(projectConfig.Configuration)
-			command.SetPlatform(projectConfig.Platform)
-			command.SetProjectName(proj.Name)
+		if err != nil {
+			return []tools.Runnable{}, warnings, err
+		}
 
-			buildCommands = append(buildCommands, command)
+		command.SetTarget("Build")
+		command.SetConfiguration(configuration)
+		command.SetPlatform(platform)
 
-			command, err = mdtool.New(builder.solution.Pth)
-			if err != nil {
-				return []tools.Runnable{}, warnings, err
-			}
-
-			command.SetTarget("archive")
-			command.SetConfiguration(projectConfig.Configuration)
-			command.SetPlatform(projectConfig.Platform)
-			command.SetProjectName(proj.Name)
-
-			buildCommands = append(buildCommands, command)
-		} else {
-			var command *xbuild.Model
-			var err error
-
-			if builder.buildTool == buildtools.Msbuild {
-				command, err = msbuild.New(builder.solution.Pth, "")
-			} else {
-				command, err = xbuild.New(builder.solution.Pth, "")
-			}
-
-			if err != nil {
-				return []tools.Runnable{}, warnings, err
-			}
-
-			command.SetTarget("Build")
-			command.SetConfiguration(configuration)
-			command.SetPlatform(platform)
+		if isArchitectureArchiveable(projectConfig.MtouchArchs...) {
+			command.SetBuildIpa(true)
 			command.SetArchiveOnBuild(true)
-
-			buildCommands = append(buildCommands, command)
 		}
+
+		buildCommands = append(buildCommands, command)
+	case constants.SDKMacOS:
+		var command *xbuild.Model
+		var err error
+
+		if builder.buildTool == buildtools.Msbuild {
+			command, err = msbuild.New(builder.solution.Pth, "")
+		} else {
+			command, err = xbuild.New(builder.solution.Pth, "")
+		}
+
+		if err != nil {
+			return []tools.Runnable{}, warnings, err
+		}
+
+		command.SetTarget("Build")
+		command.SetConfiguration(configuration)
+		command.SetPlatform(platform)
+		command.SetArchiveOnBuild(true)
+
+		buildCommands = append(buildCommands, command)
 	case constants.SDKAndroid:
 		var command *xbuild.Model
 		var err error
@@ -214,36 +147,21 @@ func (builder Model) buildXamarinUITestProjectCommand(configuration, platform st
 		warnings = append(warnings, fmt.Sprintf("project (%s) contains mapping for solution config (%s), but does not have project configuration", proj.Name, solutionConfig))
 	}
 
-	var runnable tools.Runnable
+	var command *xbuild.Model
+	var err error
 
-	if builder.buildTool == buildtools.Mdtool {
-		command, err := mdtool.New(builder.solution.Pth)
-		if err != nil {
-			return nil, warnings, err
-		}
-
-		command.SetTarget("build")
-		command.SetConfiguration(projectConfig.Configuration)
-		command.SetProjectName(proj.Name)
-		runnable = command
+	if builder.buildTool == buildtools.Msbuild {
+		command, err = msbuild.New(builder.solution.Pth, proj.Pth)
 	} else {
-		var command *xbuild.Model
-		var err error
-
-		if builder.buildTool == buildtools.Msbuild {
-			command, err = msbuild.New(builder.solution.Pth, proj.Pth)
-		} else {
-			command, err = xbuild.New(builder.solution.Pth, proj.Pth)
-		}
-		if err != nil {
-			return nil, warnings, err
-		}
-
-		command.SetConfiguration(projectConfig.Configuration)
-		runnable = command
+		command, err = xbuild.New(builder.solution.Pth, proj.Pth)
+	}
+	if err != nil {
+		return nil, warnings, err
 	}
 
-	return runnable, warnings, nil
+	command.SetConfiguration(projectConfig.Configuration)
+
+	return command, warnings, nil
 }
 
 func (builder Model) buildNunitTestProjectCommand(configuration, platform string, proj project.Model, nunitConsolePth string) (tools.Runnable, []string, error) {

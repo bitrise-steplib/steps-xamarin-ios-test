@@ -202,6 +202,10 @@ func (builder Model) BuildAllUITestableXamarinProjects(configuration, platform s
 		return warnings, err
 	}
 
+	if err := builder.BuildSolution(configuration, platform, callback); err != nil {
+		return nil, err
+	}
+
 	_, buildableReferredProjects, warns := builder.buildableXamarinUITestProjectsAndReferredProjects(configuration, platform)
 	if len(buildableReferredProjects) == 0 {
 		return warns, fmt.Errorf("No project to build found")
