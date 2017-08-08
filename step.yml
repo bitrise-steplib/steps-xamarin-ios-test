@@ -111,8 +111,8 @@ inputs:
       description: |-
         Which tool to use for building?
       value_options:
-      - xbuild
       - msbuild
+      - xbuild
       is_required: true
 outputs:
 - BITRISE_XAMARIN_TEST_RESULT:

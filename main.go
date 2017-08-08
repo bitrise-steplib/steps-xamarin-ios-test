@@ -237,9 +237,9 @@ func main() {
 	fmt.Println()
 	log.Infof("Building all iOS Xamarin UITest and Referred Projects in solution: %s", configs.XamarinSolution)
 
-	buildTool := buildtools.Xbuild
-	if configs.BuildTool == "msbuild" {
-		buildTool = buildtools.Msbuild
+	buildTool := buildtools.Msbuild
+	if configs.BuildTool == "xbuild" {
+		buildTool = buildtools.Xbuild
 	}
 
 	builder, err := builder.New(configs.XamarinSolution, []constants.SDK{constants.SDKIOS}, buildTool)
