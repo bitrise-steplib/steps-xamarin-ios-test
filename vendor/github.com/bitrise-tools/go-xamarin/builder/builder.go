@@ -202,6 +202,10 @@ func (builder Model) BuildAllUITestableXamarinProjects(configuration, platform s
 		return warnings, err
 	}
 
+	if err := builder.BuildSolution(configuration, platform, callback); err != nil {
+		return nil, err
+	}
+
 	_, buildableReferredProjects, warns := builder.buildableXamarinUITestProjectsAndReferredProjects(configuration, platform)
 	if len(buildableReferredProjects) == 0 {
 		return warns, fmt.Errorf("No project to build found")
@@ -445,16 +449,6 @@ func (builder Model) CollectProjectOutputs(configuration, platform string, start
 				})
 			}
 		case constants.SDKMacOS:
-			if builder.buildTool == buildtools.Mdtool {
-				if xcarchivePth, err := exportLatestXCArchiveFromXcodeArchives(proj.AssemblyName, startTime, endTime); err != nil {
-					return ProjectOutputMap{}, err
-				} else if xcarchivePth != "" {
-					projectOutputs.Outputs = append(projectOutputs.Outputs, OutputModel{
-						Pth:        xcarchivePth,
-						OutputType: constants.OutputTypeXCArchive,
-					})
-				}
-			}
 			if appPth, err := exportApp(projectConfig.OutputDir, proj.AssemblyName, startTime, endTime); err != nil {
 				return ProjectOutputMap{}, err
 			} else if appPth != "" {

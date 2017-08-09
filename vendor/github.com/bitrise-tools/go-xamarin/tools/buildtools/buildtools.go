@@ -8,6 +8,4 @@ const (
 	Msbuild BuildTool = iota
 	// Xbuild ...
 	Xbuild
-	// Mdtool ...
-	Mdtool
 )
