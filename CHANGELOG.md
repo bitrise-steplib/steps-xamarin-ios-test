@@ -1,6 +1,11 @@
-## Changelog (Current version: 2.3.1)
+## Changelog (Current version: 2.4.0)
 
 -----------------
+
+### 2.4.0 (2017 Aug 09)
+
+* [ff29909] prepare for 2.4.0
+* [05b86c8] Remove mdtool (#34)
 
 ### 2.3.1 (2017 Jun 27)
 
@@ -106,4 +111,4 @@
 
 -----------------
 
-Updated: 2017 Jun 27
+Updated: 2017 Aug 09
