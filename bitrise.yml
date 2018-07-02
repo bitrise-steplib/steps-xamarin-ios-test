@@ -45,6 +45,8 @@ workflows:
         - clone_depth: ""
     - certificate-and-profile-installer: {}
     - nuget-restore:
+        inputs:
+        - nuget_version: 2.8.6
     - path::./:
         title: Step test
         inputs:
