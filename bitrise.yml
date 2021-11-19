@@ -46,6 +46,7 @@ workflows:
         inputs:
         - test_to_run: $TEST_TO_RUN
         - build_tool: msbuild
+        - simulator_device: iPhone 8 Plus
     - script:
         inputs:
         - content: |-
