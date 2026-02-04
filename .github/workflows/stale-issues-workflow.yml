@@ -46,7 +46,7 @@ jobs:
         with:
           time: '1m'
       # https://github.com/dessant/lock-threads
-      - uses: dessant/lock-threads@v2
+      - uses: dessant/lock-threads@v6
         with:
           github-token: ${{ secrets.CORESTEPS_BOT_GITHUB_TOKEN }}
           # do not manage PRs
